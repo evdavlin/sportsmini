@@ -1,15 +1,22 @@
-import type { PuzzlePayload } from '@/lib/puzzles'
+'use client'
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PuzzleClue, PuzzlePayload } from '@/lib/puzzles'
 
 const TOKENS = {
   bg: '#F0EEE9',
   surface: '#FBFAF6',
   text: '#2B2B2B',
   textMuted: '#7A7A7A',
+  hero: '#3D5F7A',
   heroTint: '#DDE5EC',
+  heroOnDark: '#FBFAF6',
   border: '#2B2B2B',
   borderSoft: '#D6D0C4',
   blackSquare: '#2B2B2B',
   keyBg: '#E9E4DB',
+  error: '#A8505A',
+  success: '#5E8A6E',
 } as const
 
 function MenuIcon() {
@@ -44,27 +51,47 @@ function LightbulbIcon() {
   )
 }
 
-function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
+function ChevronIcon({
+  direction,
+  onClick,
+}: {
+  direction: 'left' | 'right'
+  onClick?: () => void
+}) {
   return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === 'left' ? 'Previous clue' : 'Next clue'}
       style={{
-        transform: direction === 'left' ? 'rotate(180deg)' : undefined,
-        display: 'block',
+        padding: 0,
+        margin: 0,
+        border: 'none',
+        background: 'none',
+        cursor: onClick ? 'pointer' : 'default',
+        lineHeight: 0,
       }}
     >
-      <path
-        d="M9 6l6 6-6 6"
-        stroke={TOKENS.textMuted}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden
+        style={{
+          transform: direction === 'left' ? 'rotate(180deg)' : undefined,
+          display: 'block',
+        }}
+      >
+        <path
+          d="M9 6l6 6-6 6"
+          stroke={TOKENS.textMuted}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   )
 }
 
@@ -104,14 +131,193 @@ function buildNumberMap(puzzle: PuzzlePayload): Map<string, number> {
   return map
 }
 
+function cellKey(r: number, c: number): string {
+  return `${r},${c}`
+}
+
+function getCellsForClue(clue: PuzzleClue, dir: 'across' | 'down'): string[] {
+  const cells: string[] = []
+  const len = clue.answer.length
+  for (let i = 0; i < len; i++) {
+    const r = dir === 'across' ? clue.row : clue.row + i
+    const c = dir === 'across' ? clue.col + i : clue.col
+    cells.push(cellKey(r, c))
+  }
+  return cells
+}
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+type GridDisplayProps = {
+  puzzle: PuzzlePayload
+  numberFontSize: number
+  letterFontSize: number
+  selectedCell: { row: number; col: number } | null
+  activeWordSet: Set<string>
+  enteredLetters: Record<string, string>
+  wrongSet: Set<string>
+  onCellClick: (r: number, c: number) => void
+}
+
+function GridDisplay({
+  puzzle,
+  numberFontSize,
+  letterFontSize,
+  selectedCell,
+  activeWordSet,
+  enteredLetters,
+  wrongSet,
+  onCellClick,
+}: GridDisplayProps) {
+  const numberMap = buildNumberMap(puzzle)
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '0 20px' }}>
+      <div
+        style={{
+          width: 360,
+          height: 360,
+          boxSizing: 'border-box',
+          border: `2px solid ${TOKENS.border}`,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${puzzle.width}, 1fr)`,
+          gridTemplateRows: `repeat(${puzzle.height}, 1fr)`,
+        }}
+      >
+        {puzzle.grid.map((row, r) =>
+          row.map((cell, c) => {
+            const isBlack = cell === '#'
+            const key = cellKey(r, c)
+            const clueNum = !isBlack ? numberMap.get(key) : undefined
+            const selected = selectedCell?.row === r && selectedCell?.col === c
+            let bg: string = TOKENS.surface
+            if (!isBlack) {
+              if (selected) bg = TOKENS.hero
+              else if (activeWordSet.has(key)) bg = TOKENS.heroTint
+            }
+            const letter = enteredLetters[key] ?? ''
+            const wrong = wrongSet.has(key)
+            let letterColor: string = TOKENS.text
+            if (wrong) letterColor = TOKENS.error
+            else if (selected) letterColor = TOKENS.heroOnDark
+            let numColor: string = TOKENS.textMuted
+            if (selected) numColor = TOKENS.heroOnDark
+
+            return (
+              <div
+                key={key}
+                role="presentation"
+                onClick={() => !isBlack && onCellClick(r, c)}
+                style={{
+                  position: 'relative',
+                  boxSizing: 'border-box',
+                  backgroundColor: isBlack ? TOKENS.blackSquare : bg,
+                  borderTop: r > 0 ? `1px solid ${TOKENS.border}` : undefined,
+                  borderLeft: c > 0 ? `1px solid ${TOKENS.border}` : undefined,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isBlack ? 'default' : 'pointer',
+                }}
+              >
+                {!isBlack && clueNum !== undefined ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      left: 2,
+                      top: 1,
+                      fontSize: numberFontSize,
+                      lineHeight: 1,
+                      fontWeight: 600,
+                      color: numColor,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {clueNum}
+                  </span>
+                ) : null}
+                {!isBlack ? (
+                  <span
+                    style={{
+                      fontSize: letterFontSize,
+                      fontWeight: 700,
+                      color: letterColor,
+                      lineHeight: 1,
+                      userSelect: 'none',
+                    }}
+                  >
+                    {letter || '\u00a0'}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
 type SolveScreenProps = {
   puzzle: PuzzlePayload
 }
 
 export default function SolveScreen({ puzzle }: SolveScreenProps) {
-  const numberMap = buildNumberMap(puzzle)
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
+  const [direction, setDirection] = useState<'across' | 'down'>('across')
+  const [entered, setEntered] = useState<Record<string, string>>({})
+  const [wrongCells, setWrongCells] = useState<Set<string>>(() => new Set())
+  const [status, setStatus] = useState<
+    null | 'all-correct' | 'some-wrong' | 'revealed' | 'solved'
+  >(null)
+  const [startTime, setStartTime] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  const puzzleRef = useRef(puzzle)
+  puzzleRef.current = puzzle
+
+  const stateRef = useRef({
+    selectedCell,
+    direction,
+    entered,
+    wrongCells,
+    status,
+  })
+  stateRef.current = { selectedCell, direction, entered, wrongCells, status }
+
+  const cellToClueMap = useMemo(() => {
+    const map = new Map<string, { across?: PuzzleClue; down?: PuzzleClue }>()
+    const place = (r: number, c: number, clue: PuzzleClue, dir: 'across' | 'down') => {
+      const k = cellKey(r, c)
+      const cur = map.get(k) ?? {}
+      if (dir === 'across') cur.across = clue
+      else cur.down = clue
+      map.set(k, cur)
+    }
+    for (const clue of puzzle.across) {
+      for (let i = 0; i < clue.answer.length; i++) {
+        place(clue.row, clue.col + i, clue, 'across')
+      }
+    }
+    for (const clue of puzzle.down) {
+      for (let i = 0; i < clue.answer.length; i++) {
+        place(clue.row + i, clue.col, clue, 'down')
+      }
+    }
+    return map
+  }, [puzzle])
+
+  const clueOrder = useMemo(() => {
+    const across = [...puzzle.across].sort((a, b) => a.num - b.num)
+    const down = [...puzzle.down].sort((a, b) => a.num - b.num)
+    return [...across, ...down]
+  }, [puzzle])
+
   const metaCenter = `${formatPuzzleNumber(puzzle.title)} · ${formatPublishDate(puzzle.publish_date)}`
-  const firstAcross = puzzle.across[0]
 
   const innerSize = 360 - 4
   const cellW = innerSize / puzzle.width
@@ -124,6 +330,390 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
   const row2 = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L']
   const row3 = ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
 
+  const isBlackCell = (r: number, c: number) => puzzle.grid[r][c] === '#'
+  const solutionLetter = (r: number, c: number) => puzzle.grid[r][c]
+
+  const activeClue = useMemo(() => {
+    if (!selectedCell) return null
+    const key = cellKey(selectedCell.row, selectedCell.col)
+    return cellToClueMap.get(key)?.[direction] ?? null
+  }, [selectedCell, direction, cellToClueMap])
+
+  const activeWordCells = useMemo(() => {
+    if (!activeClue) return new Set<string>()
+    return new Set(getCellsForClue(activeClue, direction))
+  }, [activeClue, direction])
+
+  const allFilled = useMemo(() => {
+    for (let r = 0; r < puzzle.height; r++) {
+      for (let c = 0; c < puzzle.width; c++) {
+        if (isBlackCell(r, c)) continue
+        const k = cellKey(r, c)
+        if (!entered[k]) return false
+      }
+    }
+    return true
+  }, [puzzle, entered])
+
+  const isSolved = useMemo(() => {
+    if (!allFilled) return false
+    for (let r = 0; r < puzzle.height; r++) {
+      for (let c = 0; c < puzzle.width; c++) {
+        if (isBlackCell(r, c)) continue
+        const k = cellKey(r, c)
+        if ((entered[k] ?? '') !== solutionLetter(r, c)) return false
+      }
+    }
+    return true
+  }, [allFilled, entered, puzzle])
+
+  useEffect(() => {
+    if (!startTime || status === 'revealed' || isSolved) return
+    const tick = () =>
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000))
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => window.clearInterval(id)
+  }, [startTime, status, isSolved])
+
+  useEffect(() => {
+    if (status === 'revealed') return
+    if (isSolved) {
+      setStatus('solved')
+      return
+    }
+    setStatus((s) => (s === 'solved' ? null : s))
+  }, [isSolved, status])
+
+  const touchStart = () => {
+    setStartTime((st) => st ?? Date.now())
+  }
+
+  const removeWrongKey = (set: Set<string>, key: string) => {
+    if (!set.has(key)) return set
+    const n = new Set(set)
+    n.delete(key)
+    return n
+  }
+
+  const handleCellClick = (r: number, c: number) => {
+    if (isBlackCell(r, c)) return
+    const clues = cellToClueMap.get(cellKey(r, c))
+    touchStart()
+
+    if (
+      selectedCell?.row === r &&
+      selectedCell?.col === c &&
+      clues?.across &&
+      clues?.down
+    ) {
+      setDirection((d) => (d === 'across' ? 'down' : 'across'))
+      return
+    }
+
+    let nextDir = direction
+    if (clues) {
+      if (nextDir === 'across' && !clues.across && clues.down) nextDir = 'down'
+      else if (nextDir === 'down' && !clues.down && clues.across) nextDir = 'across'
+    }
+    setDirection(nextDir)
+    setSelectedCell({ row: r, col: c })
+  }
+
+  const findClueDirection = (clue: PuzzleClue): 'across' | 'down' =>
+    puzzle.across.some((a) => a.num === clue.num && a.row === clue.row && a.col === clue.col)
+      ? 'across'
+      : 'down'
+
+  const fallbackBarClue = puzzle.across[0] ?? puzzle.down[0]
+  const displayClue = activeClue ?? fallbackBarClue
+  const displayDirection: 'across' | 'down' = activeClue
+    ? direction
+    : fallbackBarClue
+      ? findClueDirection(fallbackBarClue)
+      : 'across'
+
+  const goToClueIndex = (index: number) => {
+    if (clueOrder.length === 0) return
+    const i = ((index % clueOrder.length) + clueOrder.length) % clueOrder.length
+    const clue = clueOrder[i]
+    const dir = findClueDirection(clue)
+    setDirection(dir)
+    setSelectedCell({ row: clue.row, col: clue.col })
+    touchStart()
+  }
+
+  const handlePrevClue = () => {
+    if (!clueOrder.length) return
+    const bar = displayClue
+    if (!bar) return
+    const idx = clueOrder.findIndex(
+      (c) => c.num === bar.num && c.row === bar.row && c.col === bar.col
+    )
+    if (idx === -1) goToClueIndex(0)
+    else goToClueIndex(idx - 1)
+  }
+
+  const handleNextClue = () => {
+    if (!clueOrder.length) return
+    const bar = displayClue
+    if (!bar) return
+    const idx = clueOrder.findIndex(
+      (c) => c.num === bar.num && c.row === bar.row && c.col === bar.col
+    )
+    if (idx === -1) goToClueIndex(0)
+    else goToClueIndex(idx + 1)
+  }
+
+  const moveHorizontal = useCallback((r: number, c: number, delta: -1 | 1) => {
+    let nc = c + delta
+    const p = puzzleRef.current
+    while (nc >= 0 && nc < p.width) {
+      if (p.grid[r][nc] !== '#') return { row: r, col: nc }
+      nc += delta
+    }
+    return null
+  }, [])
+
+  const moveVertical = useCallback((r: number, c: number, delta: -1 | 1) => {
+    let nr = r + delta
+    const p = puzzleRef.current
+    while (nr >= 0 && nr < p.height) {
+      if (p.grid[nr][c] !== '#') return { row: nr, col: c }
+      nr += delta
+    }
+    return null
+  }, [])
+
+  useEffect(() => {
+    const bumpStart = () => setStartTime((t) => t ?? Date.now())
+
+    const onKey = (e: KeyboardEvent) => {
+      const { selectedCell: sel, direction: dir, entered: ent, status: st } = stateRef.current
+
+      const tryLetter = (ch: string) => {
+        if (!sel) return false
+        if (st === 'revealed') return false
+        const clues = cellToClueMap.get(cellKey(sel.row, sel.col))
+        const clue = clues?.[dir]
+        if (!clue) return false
+        const cells = getCellsForClue(clue, dir)
+        const k = cellKey(sel.row, sel.col)
+        const idx = cells.indexOf(k)
+        if (idx === -1) return false
+
+        bumpStart()
+        e.preventDefault()
+        const upper = ch.toUpperCase()
+        setEntered((prev) => ({ ...prev, [k]: upper }))
+        setWrongCells((w) => removeWrongKey(w, k))
+        if (idx < cells.length - 1) {
+          const [nr, nc] = cells[idx + 1].split(',').map(Number)
+          setSelectedCell({ row: nr, col: nc })
+        }
+        return true
+      }
+
+      const tryBackspace = () => {
+        if (!sel) return false
+        if (st === 'revealed') return false
+        const clues = cellToClueMap.get(cellKey(sel.row, sel.col))
+        const clue = clues?.[dir]
+        if (!clue) return false
+        const cells = getCellsForClue(clue, dir)
+        const k = cellKey(sel.row, sel.col)
+        const idx = cells.indexOf(k)
+        if (idx === -1) return false
+
+        bumpStart()
+        e.preventDefault()
+        if (ent[k]) {
+          setEntered((prev) => {
+            const next = { ...prev }
+            delete next[k]
+            return next
+          })
+          setWrongCells((w) => removeWrongKey(w, k))
+          return true
+        }
+        if (idx > 0) {
+          const pk = cells[idx - 1]
+          setEntered((prev) => {
+            const next = { ...prev }
+            delete next[pk]
+            return next
+          })
+          setWrongCells((w) => removeWrongKey(w, pk))
+          const [pr, pc] = pk.split(',').map(Number)
+          setSelectedCell({ row: pr, col: pc })
+        }
+        return true
+      }
+
+      if (!sel) return
+
+      if (e.key === 'Tab' || e.key === ' ') {
+        const clues = cellToClueMap.get(cellKey(sel.row, sel.col))
+        if (clues?.across && clues?.down) {
+          e.preventDefault()
+          bumpStart()
+          setDirection((d) => (d === 'across' ? 'down' : 'across'))
+        }
+        return
+      }
+
+      if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+        tryLetter(e.key)
+        return
+      }
+
+      if (e.key === 'Backspace') {
+        tryBackspace()
+        return
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        bumpStart()
+        setDirection('across')
+        const next = moveHorizontal(sel.row, sel.col, -1)
+        if (next) setSelectedCell(next)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        bumpStart()
+        setDirection('across')
+        const next = moveHorizontal(sel.row, sel.col, 1)
+        if (next) setSelectedCell(next)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        bumpStart()
+        setDirection('down')
+        const next = moveVertical(sel.row, sel.col, -1)
+        if (next) setSelectedCell(next)
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        bumpStart()
+        setDirection('down')
+        const next = moveVertical(sel.row, sel.col, 1)
+        if (next) setSelectedCell(next)
+        return
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cellToClueMap, moveHorizontal, moveVertical])
+
+  const runCheck = () => {
+    touchStart()
+    const nextWrong = new Set<string>()
+    for (const [key, letter] of Object.entries(entered)) {
+      const [r, c] = key.split(',').map(Number)
+      if (r >= puzzle.height || c >= puzzle.width) continue
+      if (puzzle.grid[r][c] === '#') continue
+      if (letter !== solutionLetter(r, c)) nextWrong.add(key)
+    }
+    setWrongCells(nextWrong)
+
+    if (isSolved) setStatus('solved')
+    else if (nextWrong.size > 0) setStatus('some-wrong')
+    else setStatus('all-correct')
+  }
+
+  const runReveal = () => {
+    touchStart()
+    const next: Record<string, string> = {}
+    for (let r = 0; r < puzzle.height; r++) {
+      for (let c = 0; c < puzzle.width; c++) {
+        if (puzzle.grid[r][c] === '#') continue
+        next[cellKey(r, c)] = solutionLetter(r, c)
+      }
+    }
+    setEntered(next)
+    setWrongCells(new Set())
+    setStatus('revealed')
+  }
+
+  const runClear = () => {
+    setEntered({})
+    setWrongCells(new Set())
+    setStatus(null)
+  }
+
+  const handleKeyboardLetter = (ch: string) => {
+    const sel = stateRef.current.selectedCell
+    const dir = stateRef.current.direction
+    const st = stateRef.current.status
+    if (!sel || st === 'revealed') return
+    const clues = cellToClueMap.get(cellKey(sel.row, sel.col))
+    const clue = clues?.[dir]
+    if (!clue) return
+    const cells = getCellsForClue(clue, dir)
+    const k = cellKey(sel.row, sel.col)
+    const idx = cells.indexOf(k)
+    if (idx === -1) return
+    touchStart()
+    const upper = ch.toUpperCase()
+    setEntered((prev) => ({ ...prev, [k]: upper }))
+    setWrongCells((w) => removeWrongKey(w, k))
+    if (idx < cells.length - 1) {
+      const [nr, nc] = cells[idx + 1].split(',').map(Number)
+      setSelectedCell({ row: nr, col: nc })
+    }
+  }
+
+  const handleKeyboardBackspace = () => {
+    const sel = stateRef.current.selectedCell
+    const dir = stateRef.current.direction
+    const ent = stateRef.current.entered
+    const st = stateRef.current.status
+    if (!sel || st === 'revealed') return
+    const clues = cellToClueMap.get(cellKey(sel.row, sel.col))
+    const clue = clues?.[dir]
+    if (!clue) return
+    const cells = getCellsForClue(clue, dir)
+    const k = cellKey(sel.row, sel.col)
+    const idx = cells.indexOf(k)
+    if (idx === -1) return
+    touchStart()
+    if (ent[k]) {
+      setEntered((prev) => {
+        const next = { ...prev }
+        delete next[k]
+        return next
+      })
+      setWrongCells((w) => removeWrongKey(w, k))
+      return
+    }
+    if (idx > 0) {
+      const pk = cells[idx - 1]
+      setEntered((prev) => {
+        const next = { ...prev }
+        delete next[pk]
+        return next
+      })
+      setWrongCells((w) => removeWrongKey(w, pk))
+      const [pr, pc] = pk.split(',').map(Number)
+      setSelectedCell({ row: pr, col: pc })
+    }
+  }
+
+  const statusLine = (() => {
+    if (status === 'all-correct')
+      return { text: 'ALL CORRECT', color: TOKENS.success }
+    if (status === 'some-wrong')
+      return { text: `${wrongCells.size} WRONG`, color: TOKENS.error }
+    if (status === 'revealed') return { text: 'REVEALED', color: TOKENS.textMuted }
+    if (status === 'solved') return { text: 'SOLVED', color: TOKENS.success }
+    return { text: '', color: TOKENS.text }
+  })()
+
   return (
     <div
       style={{
@@ -135,7 +725,6 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
       }}
     >
       <div style={{ maxWidth: 420, margin: '0 auto' }}>
-        {/* Header */}
         <div
           style={{
             display: 'flex',
@@ -187,7 +776,6 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
           }}
         />
 
-        {/* Timer row */}
         <div
           style={{
             display: 'flex',
@@ -205,7 +793,7 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
               color: TOKENS.text,
             }}
           >
-            0:00
+            {formatElapsed(elapsedSeconds)}
           </div>
           <div
             style={{
@@ -223,79 +811,37 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
           </div>
         </div>
 
-        {/* Grid */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '0 20px' }}>
-          <div
-            style={{
-              width: 360,
-              height: 360,
-              boxSizing: 'border-box',
-              border: `2px solid ${TOKENS.border}`,
-              display: 'grid',
-              gridTemplateColumns: `repeat(${puzzle.width}, 1fr)`,
-              gridTemplateRows: `repeat(${puzzle.height}, 1fr)`,
-            }}
-          >
-            {puzzle.grid.map((row, r) =>
-              row.map((cell, c) => {
-                const isBlack = cell === '#'
-                const key = `${r},${c}`
-                const clueNum = !isBlack ? numberMap.get(key) : undefined
-                return (
-                  <div
-                    key={`${r}-${c}`}
-                    style={{
-                      position: 'relative',
-                      boxSizing: 'border-box',
-                      backgroundColor: isBlack ? TOKENS.blackSquare : TOKENS.surface,
-                      borderTop: r > 0 ? `1px solid ${TOKENS.border}` : undefined,
-                      borderLeft: c > 0 ? `1px solid ${TOKENS.border}` : undefined,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {!isBlack && clueNum !== undefined ? (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          left: 2,
-                          top: 1,
-                          fontSize: numberFontSize,
-                          lineHeight: 1,
-                          fontWeight: 600,
-                          color: TOKENS.textMuted,
-                          pointerEvents: 'none',
-                        }}
-                      >
-                        {clueNum}
-                      </span>
-                    ) : null}
-                    {!isBlack ? (
-                      <span
-                        style={{
-                          fontSize: letterFontSize,
-                          fontWeight: 700,
-                          color: TOKENS.text,
-                          lineHeight: 1,
-                          userSelect: 'none',
-                        }}
-                      >
-                        {'\u00a0'}
-                      </span>
-                    ) : null}
-                  </div>
-                )
-              })
-            )}
-          </div>
+        <GridDisplay
+          puzzle={puzzle}
+          numberFontSize={numberFontSize}
+          letterFontSize={letterFontSize}
+          selectedCell={selectedCell}
+          activeWordSet={activeWordCells}
+          enteredLetters={entered}
+          wrongSet={wrongCells}
+          onCellClick={handleCellClick}
+        />
+
+        <div
+          style={{
+            minHeight: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: 2,
+            color: statusLine.color,
+            marginTop: 12,
+          }}
+        >
+          {statusLine.text}
         </div>
 
-        {/* Active clue bar */}
-        {firstAcross ? (
+        {displayClue ? (
           <div
             style={{
-              marginTop: 20,
+              marginTop: 8,
               backgroundColor: TOKENS.heroTint,
               borderTop: `1px solid ${TOKENS.borderSoft}`,
               borderBottom: `1px solid ${TOKENS.borderSoft}`,
@@ -306,7 +852,7 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
               boxSizing: 'border-box',
             }}
           >
-            <ChevronIcon direction="left" />
+            <ChevronIcon direction="left" onClick={handlePrevClue} />
             <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
               <div
                 style={{
@@ -318,22 +864,24 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
                   marginBottom: 4,
                 }}
               >
-                {firstAcross.num} ACROSS
+                {displayClue.num} {displayDirection.toUpperCase()}
               </div>
               <div style={{ fontSize: 15, color: TOKENS.text, lineHeight: 1.35, fontWeight: 500 }}>
-                {firstAcross.clue}
+                {displayClue.clue}
               </div>
             </div>
-            <ChevronIcon direction="right" />
+            <ChevronIcon direction="right" onClick={handleNextClue} />
           </div>
         ) : null}
 
-        {/* Keyboard */}
         <div style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
             {row1.map((k) => (
               <div
                 key={k}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleKeyboardLetter(k)}
                 style={{
                   flex: 1,
                   maxWidth: 40,
@@ -348,6 +896,7 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
                   fontWeight: 600,
                   color: TOKENS.text,
                   userSelect: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 {k}
@@ -367,6 +916,9 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
             {row2.map((k) => (
               <div
                 key={k}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleKeyboardLetter(k)}
                 style={{
                   flex: 1,
                   maxWidth: 40,
@@ -381,6 +933,7 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
                   fontWeight: 600,
                   color: TOKENS.text,
                   userSelect: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 {k}
@@ -391,6 +944,9 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
             {row3.map((k) => (
               <div
                 key={k}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleKeyboardLetter(k)}
                 style={{
                   flex: 1,
                   maxWidth: 40,
@@ -405,12 +961,16 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
                   fontWeight: 600,
                   color: TOKENS.text,
                   userSelect: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 {k}
               </div>
             ))}
             <div
+              role="button"
+              tabIndex={0}
+              onClick={handleKeyboardBackspace}
               style={{
                 flex: 1.5,
                 maxWidth: 50,
@@ -426,11 +986,82 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
                 fontWeight: 600,
                 color: TOKENS.text,
                 userSelect: 'none',
+                cursor: 'pointer',
               }}
             >
               ⌫
             </div>
           </div>
+        </div>
+
+        <div
+          style={{
+            padding: '8px 20px 20px',
+            display: 'flex',
+            gap: 10,
+            justifyContent: 'center',
+          }}
+        >
+          <button
+            type="button"
+            onClick={runCheck}
+            style={{
+              flex: 1,
+              maxWidth: 110,
+              background: 'transparent',
+              border: `1px solid ${TOKENS.text}`,
+              color: TOKENS.text,
+              padding: '12px 0',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            CHECK
+          </button>
+          <button
+            type="button"
+            onClick={runReveal}
+            style={{
+              flex: 1,
+              maxWidth: 110,
+              background: 'transparent',
+              border: `1px solid ${TOKENS.text}`,
+              color: TOKENS.text,
+              padding: '12px 0',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            REVEAL
+          </button>
+          <button
+            type="button"
+            onClick={runClear}
+            style={{
+              flex: 1,
+              maxWidth: 110,
+              background: 'transparent',
+              border: `1px solid ${TOKENS.text}`,
+              color: TOKENS.text,
+              padding: '12px 0',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            CLEAR
+          </button>
         </div>
       </div>
     </div>
