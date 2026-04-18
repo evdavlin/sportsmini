@@ -3,18 +3,15 @@
  *
  * TITLE: My puzzle
  * DIFFICULTY: 3
- *
- * GRID
- * AB#
- * C.D
- *
- * ACROSS
- * 1 0 0 AB | Horizontal clue
- *
- * DOWN
- * 2 0 0 AC | Vertical clue
+ * GRID:
+ * .#.
+ * ...
+ * CLUES:
+ * 1A (0,0) CAT "A small pet"
+ * 2D (0,2) DOG "Another pet"
  *
  * GRID uses # black, letters A-Z, period (.) for blank white filled by clues.
+ * Clues: one line each, format 2A (row,col) WORD "clue" with optional | modifiers
  */
 
 export type ParsedClue = {
@@ -38,6 +35,10 @@ export type DslError = { line: number; message: string }
 const MIN_DIM = 3
 const MAX_DIM = 10
 
+/** Clue line: NUM + A|D, coords, answer, quoted clue; optional | modifiers */
+const CLUE_LINE_RE =
+  /^(\d+)([AD])\s+\((\d+),(\d+)\)\s+([A-Za-z]+)\s+"([^"]*)"(?:\s*\|\s*(.+))?\s*$/
+
 export function parsePuzzleDsl(input: string): {
   parsed: ParsedPuzzle | null
   errors: DslError[]
@@ -48,99 +49,74 @@ export function parsePuzzleDsl(input: string): {
 
   const lines = input.replace(/\r\n/g, '\n').split('\n')
 
-  let current =
-    'none' as 'none' | 'title' | 'difficulty' | 'grid' | 'across' | 'down'
-
-  let titleBuf = ''
-  let diffBuf = ''
-  const gridLines: string[] = []
-  const acrossLines: string[] = []
-  const downLines: string[] = []
+  let current = 'none' as 'none' | 'grid' | 'clues'
 
   let sectionsTitle: string | undefined
   let sectionsDifficulty: number | undefined
-
-  const flushTitle = () => {
-    if (current === 'title' && titleBuf.trim()) {
-      sectionsTitle = titleBuf.trim()
-    }
-    titleBuf = ''
-  }
-  const flushDiff = () => {
-    if (current === 'difficulty' && diffBuf.trim()) {
-      sectionsDifficulty = Number(diffBuf.trim())
-    }
-    diffBuf = ''
-  }
+  const gridLines: string[] = []
+  const clueLines: Array<{ lineNo: number; text: string }> = []
 
   for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]
     const ln = i + 1
-    let line = lines[i].trim()
-    if (!line || line.startsWith('#')) continue
+    const trimmed = raw.trim()
 
-    const hdr = /^([A-Za-z]+)\s*:\s*(.*)$/.exec(line)
-    if (hdr) {
-      const name = hdr[1].toUpperCase()
-      const rest = hdr[2]
-      if (name === 'TITLE') {
-        flushTitle()
-        flushDiff()
-        sectionsTitle = rest.trim()
-        current = 'none'
-        continue
-      }
-      if (name === 'DIFFICULTY') {
-        flushTitle()
-        flushDiff()
-        sectionsDifficulty = Number(rest.trim())
-        current = 'none'
-        continue
-      }
+    if (trimmed === '') {
+      if (current === 'grid' || current === 'clues') current = 'none'
+      continue
     }
 
-    const bare = line.toUpperCase().trim()
-    if (bare === 'GRID' || bare === 'GRID:') {
-      flushTitle()
-      flushDiff()
+    // Full-line comments: skip outside GRID (# is valid in grid rows)
+    if (current !== 'grid' && trimmed.startsWith('#')) continue
+
+    const titleM = /^\s*TITLE\s*:\s*(.*)$/i.exec(raw)
+    if (titleM) {
+      sectionsTitle = titleM[1]!.trim()
+      current = 'none'
+      continue
+    }
+
+    const diffM = /^\s*DIFFICULTY\s*:\s*(.*)$/i.exec(raw)
+    if (diffM) {
+      sectionsDifficulty = Number(diffM[1]!.trim())
+      current = 'none'
+      continue
+    }
+
+    if (/^\s*GRID\s*:?\s*$/i.test(trimmed)) {
       gridLines.length = 0
       current = 'grid'
       continue
     }
-    if (bare === 'ACROSS' || bare === 'ACROSS:') {
-      flushTitle()
-      flushDiff()
-      acrossLines.length = 0
-      current = 'across'
-      continue
-    }
-    if (bare === 'DOWN' || bare === 'DOWN:') {
-      flushTitle()
-      flushDiff()
-      downLines.length = 0
-      current = 'down'
+
+    if (/^\s*CLUES\s*:?\s*$/i.test(trimmed)) {
+      clueLines.length = 0
+      current = 'clues'
       continue
     }
 
-    if (current === 'grid') gridLines.push(line.replace(/\s/g, ''))
-    else if (current === 'across') acrossLines.push(line)
-    else if (current === 'down') downLines.push(line)
-    else if (current === 'title') titleBuf += (titleBuf ? ' ' : '') + line
-    else if (current === 'difficulty') diffBuf += line
-    else if (current === 'none')
-      warnings.push(`Line ${ln}: unexpected content (hint: use TITLE:, DIFFICULTY:, GRID, ACROSS, DOWN)`)
+    if (current === 'grid') {
+      gridLines.push(trimmed.replace(/\s/g, ''))
+      continue
+    }
+
+    if (current === 'clues') {
+      if (trimmed.startsWith('#')) continue
+      clueLines.push({ lineNo: ln, text: trimmed })
+      continue
+    }
+
+    warnings.push(
+      `Line ${ln}: unexpected content (hint: use TITLE:, DIFFICULTY:, GRID:, CLUES:)`,
+    )
   }
-
-  flushTitle()
-  flushDiff()
 
   if (!sectionsTitle?.trim()) errors.push({ line: 0, message: 'Missing TITLE' })
   if (sectionsDifficulty === undefined || Number.isNaN(sectionsDifficulty)) {
     errors.push({ line: 0, message: 'Missing or invalid DIFFICULTY' })
   }
   if (!gridLines.length) errors.push({ line: 0, message: 'Missing GRID rows' })
-  if (!acrossLines.length && !downLines.length) {
-    errors.push({ line: 0, message: 'Missing ACROSS / DOWN clues' })
-  }
+  if (!clueLines.length) errors.push({ line: 0, message: 'No clues found' })
 
   if (errors.length) return { parsed: null, errors, warnings }
 
@@ -171,46 +147,36 @@ export function parsePuzzleDsl(input: string): {
     }
   }
 
-  const parseClueLine = (text: string, lineHint: number): ParsedClue | null => {
-    let sep = text.indexOf('|')
-    if (sep < 0) sep = text.indexOf('::')
-    if (sep < 0) {
-      errors.push({ line: lineHint, message: 'Clue needs "|" or "::" before clue text' })
-      return null
-    }
-    const head = text.slice(0, sep).trim()
-    const clueText = text.slice(sep + (text[sep] === '|' ? 1 : 2)).trim()
-    const parts = head.split(/\s+/).filter(Boolean)
-    if (parts.length < 4) {
-      errors.push({ line: lineHint, message: 'Expected: num row col WORD...' })
-      return null
-    }
-    const num = Number(parts[0])
-    const row = Number(parts[1])
-    const col = Number(parts[2])
-    const word = parts
-      .slice(3)
-      .join('')
-      .toUpperCase()
-      .replace(/[^A-Z]/g, '')
-    if (!Number.isFinite(num) || !Number.isFinite(row) || !Number.isFinite(col) || !word) {
-      errors.push({ line: lineHint, message: 'Invalid clue header' })
-      return null
-    }
-    return { num, row, col, word, clue: clueText }
-  }
-
   const across: ParsedClue[] = []
   const down: ParsedClue[] = []
 
-  acrossLines.forEach((l, idx) => {
-    const p = parseClueLine(l, idx + 1)
-    if (p) across.push(p)
-  })
-  downLines.forEach((l, idx) => {
-    const p = parseClueLine(l, idx + 1)
-    if (p) down.push(p)
-  })
+  for (const { text, lineNo } of clueLines) {
+    const m = CLUE_LINE_RE.exec(text.trim())
+    if (!m) {
+      errors.push({
+        line: lineNo,
+        message:
+          'Invalid clue line (expected e.g. 2A (1,4) WORD "Clue text" with optional | modifiers)',
+      })
+      continue
+    }
+    const num = Number(m[1])
+    const dirLetter = m[2]!.toUpperCase()
+    const row = Number(m[3])
+    const col = Number(m[4])
+    const word = m[5]!.toUpperCase().replace(/[^A-Z]/g, '')
+    const clueText = m[6] ?? ''
+    if (!Number.isFinite(num) || !Number.isFinite(row) || !Number.isFinite(col) || !word) {
+      errors.push({ line: lineNo, message: 'Invalid clue fields' })
+      continue
+    }
+    const p: ParsedClue = { num, row, col, word, clue: clueText }
+    if (dirLetter === 'A') across.push(p)
+    else down.push(p)
+  }
+
+  if (!across.length) warnings.push('No across clues')
+  if (!down.length) warnings.push('No down clues')
 
   const numDir = new Set<string>()
   for (const c of across) {
