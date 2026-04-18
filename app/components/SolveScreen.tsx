@@ -1,9 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { PuzzleClue, PuzzlePayload } from '@/lib/puzzles'
-import { getTodaySolve, saveTodaySolve } from '@/lib/progress'
+import { supabase } from '@/lib/supabase'
+import { getDeviceId, touchDevice } from '@/lib/device'
+import {
+  getTodaySolve,
+  savePreviewSolve,
+  saveTodaySolve,
+  clearPreviewSolve,
+} from '@/lib/progress'
 import { getMockStats } from '@/lib/mock-stats'
 import {
   AppHeader,
@@ -46,9 +54,18 @@ function getCellsForClue(clue: PuzzleClue, dir: 'across' | 'down'): string[] {
 
 type SolveScreenProps = {
   puzzle: PuzzlePayload
+  /** Admin preview — no redirects, DB writes, or daily localStorage key */
+  previewMode?: boolean
+  previewTitle?: string | null
+  previewStatus?: string | null
 }
 
-export default function SolveScreen({ puzzle }: SolveScreenProps) {
+export default function SolveScreen({
+  puzzle,
+  previewMode = false,
+  previewTitle,
+  previewStatus,
+}: SolveScreenProps) {
   const router = useRouter()
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
   const [direction, setDirection] = useState<'across' | 'down'>('across')
@@ -60,6 +77,13 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [streak, setStreak] = useState(0)
+  const [previewDoneSeconds, setPreviewDoneSeconds] = useState<number | null>(null)
+
+  const sessionStartedRef = useRef(false)
+  const deviceIdRef = useRef<string | null>(null)
+  const previewModeRef = useRef(previewMode)
+  const maybeStartSessionRef = useRef<(() => Promise<void>) | null>(null)
+  previewModeRef.current = previewMode
 
   const puzzleRef = useRef(puzzle)
   puzzleRef.current = puzzle
@@ -76,14 +100,35 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
   const completionRef = useRef(false)
 
   useEffect(() => {
-    setStreak(getMockStats(getTodaySolve(puzzle.publish_date)).streak)
-  }, [puzzle.publish_date])
+    if (!previewMode) {
+      setStreak(getMockStats(getTodaySolve(puzzle.publish_date)).streak)
+    }
+  }, [puzzle.publish_date, previewMode])
 
   useEffect(() => {
+    if (previewMode) return
     if (getTodaySolve(puzzle.publish_date)) {
       router.replace('/waiting')
     }
-  }, [puzzle.publish_date, router])
+  }, [puzzle.publish_date, router, previewMode])
+
+  const maybeStartSession = useCallback(async () => {
+    if (previewMode || sessionStartedRef.current) return
+    sessionStartedRef.current = true
+    const deviceId = getDeviceId()
+    deviceIdRef.current = deviceId
+    touchDevice(deviceId)
+    await supabase.from('solves').upsert(
+      {
+        puzzle_id: puzzle.puzzle_id,
+        device_id: deviceId,
+        started_at: new Date().toISOString(),
+      },
+      { onConflict: 'puzzle_id,device_id', ignoreDuplicates: true }
+    )
+  }, [previewMode, puzzle.puzzle_id])
+
+  maybeStartSessionRef.current = maybeStartSession
 
   const cellToClueMap = useMemo(() => {
     const map = new Map<string, { across?: PuzzleClue; down?: PuzzleClue }>()
@@ -200,19 +245,50 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
     if (!isSolved || completionRef.current) return
     completionRef.current = true
     const st = stateRef.current.status
+    const ent = { ...stateRef.current.entered }
+
+    if (previewMode) {
+      savePreviewSolve(puzzle.puzzle_id, {
+        puzzle_id: puzzle.puzzle_id,
+        publish_date: puzzle.publish_date,
+        time_seconds: elapsedSeconds,
+        hints_used: st === 'revealed' ? 1 : 0,
+        entered: ent,
+        solved_at: new Date().toISOString(),
+      })
+      setPreviewDoneSeconds(elapsedSeconds)
+      return
+    }
+
     saveTodaySolve({
       puzzle_id: puzzle.puzzle_id,
       publish_date: puzzle.publish_date,
       time_seconds: elapsedSeconds,
       hints_used: st === 'revealed' ? 999 : 0,
-      entered: { ...stateRef.current.entered },
+      entered: ent,
       solved_at: new Date().toISOString(),
     })
+
+    const did = deviceIdRef.current ?? getDeviceId()
+    void supabase
+      .from('solves')
+      .update({
+        solved_at: new Date().toISOString(),
+        time_seconds: elapsedSeconds,
+        hints_used: st === 'revealed' ? 1 : 0,
+        was_revealed: st === 'revealed',
+      })
+      .eq('puzzle_id', puzzle.puzzle_id)
+      .eq('device_id', did)
+
     router.push('/win')
-  }, [isSolved, elapsedSeconds, puzzle.puzzle_id, puzzle.publish_date, router])
+  }, [isSolved, elapsedSeconds, puzzle.puzzle_id, puzzle.publish_date, router, previewMode])
 
   const touchStart = () => {
-    setStartTime((st) => st ?? Date.now())
+    setStartTime((st) => {
+      if (!st && !previewMode) void maybeStartSession()
+      return st ?? Date.now()
+    })
   }
 
   const removeWrongKey = (set: Set<string>, key: string) => {
@@ -312,7 +388,12 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
   }, [])
 
   useEffect(() => {
-    const bumpStart = () => setStartTime((t) => t ?? Date.now())
+    const bumpStart = () =>
+      setStartTime((t) => {
+        const next = t ?? Date.now()
+        if (!t && !previewModeRef.current) void maybeStartSessionRef.current?.()
+        return next
+      })
 
     const onKey = (e: KeyboardEvent) => {
       const { selectedCell: sel, direction: dir, entered: ent, status: st } = stateRef.current
@@ -436,6 +517,19 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [cellToClueMap, moveHorizontal, moveVertical])
 
+  function resetPreviewProgress() {
+    clearPreviewSolve(puzzle.puzzle_id)
+    setEntered({})
+    setWrongCells(new Set())
+    setStatus(null)
+    setPreviewDoneSeconds(null)
+    completionRef.current = false
+    sessionStartedRef.current = false
+    deviceIdRef.current = null
+    setStartTime(null)
+    setElapsedSeconds(0)
+  }
+
   const runCheck = () => {
     touchStart()
     const nextWrong = new Set<string>()
@@ -550,6 +644,67 @@ export default function SolveScreen({ puzzle }: SolveScreenProps) {
         paddingBottom: 24,
       }}
     >
+      {previewMode ? (
+        <div
+          style={{
+            padding: '12px 16px',
+            background: theme.heroTint,
+            borderBottom: `1px solid ${theme.borderSoft}`,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 13,
+            maxWidth: 420,
+            margin: '0 auto',
+          }}
+        >
+          <span>
+            <strong>PREVIEW MODE</strong>
+            {' · '}
+            {previewTitle ?? puzzle.title ?? 'Untitled'}
+            {previewStatus ? (
+              <span
+                style={{
+                  marginLeft: 8,
+                  padding: '2px 8px',
+                  background: theme.surface,
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {previewStatus}
+              </span>
+            ) : null}
+          </span>
+          <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={resetPreviewProgress}
+              style={{
+                padding: '6px 12px',
+                border: `1px solid ${theme.text}`,
+                background: 'transparent',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Reset
+            </button>
+            <Link href="/admin" style={{ color: theme.hero, fontWeight: 600 }}>
+              Back to admin
+            </Link>
+          </span>
+          {previewDoneSeconds != null ? (
+            <span style={{ width: '100%', fontWeight: 700, color: theme.hero }}>
+              Completed in {formatElapsed(previewDoneSeconds)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div style={{ maxWidth: 420, margin: '0 auto' }}>
         <AppHeader
           streak={streak}

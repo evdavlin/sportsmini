@@ -40,3 +40,36 @@ export function clearTodaySolve(publishDate?: string): void {
     /* ignore */
   }
 }
+
+function previewKey(puzzleId: string): string {
+  return `sportsmini:preview:${puzzleId}`
+}
+
+export function getPreviewSolve(puzzleId: string): TodaySolve | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(previewKey(puzzleId))
+    if (!raw) return null
+    return JSON.parse(raw) as TodaySolve
+  } catch {
+    return null
+  }
+}
+
+export function savePreviewSolve(puzzleId: string, solve: TodaySolve): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(previewKey(puzzleId), JSON.stringify(solve))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearPreviewSolve(puzzleId: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(previewKey(puzzleId))
+  } catch {
+    /* ignore */
+  }
+}

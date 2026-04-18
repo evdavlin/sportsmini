@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Environment variables
+
+### `CRON_SECRET`
+
+Used by `GET /api/cron/publish-next` (Vercel Cron). Set a random string in the Vercel project’s environment variables. The cron request must send `Authorization: Bearer <CRON_SECRET>`; when you attach a secret to a Vercel cron job, Vercel can inject that header automatically.
+
+The schedule in `vercel.json` is `0 11 * * *` (11:00 UTC), which aligns with **7:00 Eastern** during daylight saving (EDT). During standard time (EST), 11:00 UTC is **6:00 Eastern** — for a stricter match you may want two cron entries adjusted seasonally.
