@@ -1,7 +1,7 @@
-import HomeScreen from '@/app/components/HomeScreen'
+import SolveScreen from '@/app/components/SolveScreen'
 import { getTodaysPuzzle } from '@/lib/puzzles'
 
-export default async function Home() {
+export default async function SolvePage() {
   const puzzle = await getTodaysPuzzle()
 
   if (!puzzle) {
@@ -12,7 +12,7 @@ export default async function Home() {
     )
   }
 
-  return <HomeScreen puzzle={puzzle} />
+  return <SolveScreen puzzle={puzzle} />
 }
 
 export const revalidate = 0
