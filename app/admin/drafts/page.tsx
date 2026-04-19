@@ -99,6 +99,9 @@ export default async function AdminDraftsPage() {
                   </span>
                 ) : null}
               </div>
+              <Link href={`/admin/builder?id=${d.id}`} style={{ color: s.hero, fontWeight: 600 }}>
+                Edit in builder
+              </Link>
               <Link href={`/admin/puzzles/${d.id}`} style={{ color: s.hero, fontWeight: 600 }}>
                 Preview
               </Link>
