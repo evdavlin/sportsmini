@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { parsePuzzleDsl } from '@/lib/dsl'
-import { createDraftFromDslAction } from '@/app/admin/actions'
+import { createDraftFromDslAction, previewGlossaryMatchesForDslAction } from '@/app/admin/actions'
 
 function isNextRedirect(error: unknown): boolean {
   return (
@@ -17,8 +17,26 @@ function isNextRedirect(error: unknown): boolean {
 export default function NewPuzzlePage() {
   const [text, setText] = useState('')
   const [submitErr, setSubmitErr] = useState<string | null>(null)
+  const [glossaryPreview, setGlossaryPreview] = useState<
+    Array<{ direction: 'across' | 'down'; num: number; matched: boolean }>
+  >([])
 
   const parsedRun = useMemo(() => parsePuzzleDsl(text), [text])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void previewGlossaryMatchesForDslAction(text).then((r) => setGlossaryPreview(r.matches))
+    }, 450)
+    return () => window.clearTimeout(id)
+  }, [text])
+
+  const glossaryHint = useMemo(() => {
+    const m = new Map<string, boolean>()
+    for (const x of glossaryPreview) {
+      m.set(`${x.direction}:${x.num}`, x.matched)
+    }
+    return m
+  }, [glossaryPreview])
 
   const canSubmit = parsedRun.errors.length === 0 && parsedRun.parsed !== null
 
@@ -132,7 +150,15 @@ export default function NewPuzzlePage() {
               <ul style={{ margin: '0 0 12px', paddingLeft: 16 }}>
                 {parsedRun.parsed.across.map((c) => (
                   <li key={`a-${c.num}`}>
-                    {c.num}. ({c.row},{c.col}) {c.word} — {c.clue}
+                    {c.num}. ({c.row},{c.col}) {c.word} — {c.clue}{' '}
+                    <span style={{ fontSize: 11, color: glossaryHint.get(`across:${c.num}`) ? '#5E8A6E' : '#B87A3D' }}>
+                      ({glossaryHint.get(`across:${c.num}`) === undefined
+                        ? '…'
+                        : glossaryHint.get(`across:${c.num}`)
+                          ? 'in glossary'
+                          : 'new glossary row'}
+                      )
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -140,7 +166,15 @@ export default function NewPuzzlePage() {
               <ul style={{ margin: 0, paddingLeft: 16 }}>
                 {parsedRun.parsed.down.map((c) => (
                   <li key={`d-${c.num}`}>
-                    {c.num}. ({c.row},{c.col}) {c.word} — {c.clue}
+                    {c.num}. ({c.row},{c.col}) {c.word} — {c.clue}{' '}
+                    <span style={{ fontSize: 11, color: glossaryHint.get(`down:${c.num}`) ? '#5E8A6E' : '#B87A3D' }}>
+                      ({glossaryHint.get(`down:${c.num}`) === undefined
+                        ? '…'
+                        : glossaryHint.get(`down:${c.num}`)
+                          ? 'in glossary'
+                          : 'new glossary row'}
+                      )
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -61,6 +61,39 @@ export async function deleteDraftAction(puzzleId: string) {
   revalidatePath('/admin')
 }
 
+/**
+ * Preview which clues match an existing `crossword_glossary` row (same word + clue text as DSL).
+ */
+export async function previewGlossaryMatchesForDslAction(dslText: string) {
+  const { parsed, errors } = parsePuzzleDsl(dslText)
+  if (!parsed || errors.length) {
+    return { matches: [] as Array<{ direction: 'across' | 'down'; num: number; matched: boolean }> }
+  }
+
+  const matches: Array<{ direction: 'across' | 'down'; num: number; matched: boolean }> = []
+
+  for (const c of parsed.across) {
+    const { data } = await supabaseService
+      .from('crossword_glossary')
+      .select('id')
+      .eq('word', c.word)
+      .eq('clue', c.clue)
+      .maybeSingle()
+    matches.push({ direction: 'across', num: c.num, matched: !!data?.id })
+  }
+  for (const c of parsed.down) {
+    const { data } = await supabaseService
+      .from('crossword_glossary')
+      .select('id')
+      .eq('word', c.word)
+      .eq('clue', c.clue)
+      .maybeSingle()
+    matches.push({ direction: 'down', num: c.num, matched: !!data?.id })
+  }
+
+  return { matches }
+}
+
 export async function createDraftFromDslAction(dslText: string) {
   const { parsed, errors } = parsePuzzleDsl(dslText)
   if (!parsed || errors.length) {
@@ -70,63 +103,58 @@ export async function createDraftFromDslAction(dslText: string) {
   const height = parsed.gridPattern.length
   const width = parsed.gridPattern[0]?.length ?? 0
 
-  const { data: inserted, error: insertErr } = await supabaseService
-    .from('puzzles')
-    .insert({
-      title: parsed.title,
-      difficulty: parsed.difficulty,
-      status: 'draft',
-      width,
-      height,
-      grid: { pattern: parsed.gridPattern },
-    })
-    .select('id')
-    .single()
-
-  if (insertErr || !inserted?.id) {
-    throw new Error(insertErr?.message ?? 'Insert puzzle failed')
-  }
-
-  const puzzleId = inserted.id as string
-
-  const clueRows: Array<{
-    puzzle_id: string
-    number: number
-    row: number
-    col: number
-    direction: string
-    word: string
-    clue_text: string
-  }> = []
-
-  for (const c of parsed.across) {
-    clueRows.push({
-      puzzle_id: puzzleId,
+  const clues = [
+    ...parsed.across.map((c) => ({
       number: c.num,
+      direction: 'across' as const,
       row: c.row,
       col: c.col,
-      direction: 'across',
-      word: c.word,
+      word: c.word.toUpperCase(),
       clue_text: c.clue,
-    })
-  }
-  for (const c of parsed.down) {
-    clueRows.push({
-      puzzle_id: puzzleId,
+    })),
+    ...parsed.down.map((c) => ({
       number: c.num,
+      direction: 'down' as const,
       row: c.row,
       col: c.col,
-      direction: 'down',
-      word: c.word,
+      word: c.word.toUpperCase(),
       clue_text: c.clue,
-    })
+    })),
+  ]
+
+  const p_payload = {
+    title: parsed.title,
+    difficulty: parsed.difficulty,
+    width,
+    height,
+    grid: { pattern: parsed.gridPattern },
+    clues,
   }
 
-  const { error: clueErr } = await supabaseService.from('puzzle_clues').insert(clueRows)
+  const { data, error: rpcErr } = await supabaseService.rpc('create_draft_with_glossary', {
+    p_payload,
+  })
 
-  if (clueErr) {
-    await supabaseService.from('puzzles').delete().eq('id', puzzleId)
-    throw new Error(clueErr.message)
+  if (rpcErr) {
+    throw new Error(rpcErr.message)
+  }
+
+  const result = data as
+    | { puzzle_id?: string; clue_count?: number; new_glossary_count?: number; linked_glossary_count?: number }
+    | null
+    | undefined
+
+  const puzzleId =
+    result && typeof result === 'object' && result.puzzle_id != null
+      ? String(result.puzzle_id)
+      : null
+
+  if (!puzzleId) {
+    throw new Error(
+      typeof data === 'string'
+        ? data
+        : 'create_draft_with_glossary returned no puzzle_id — check RPC return type in Supabase',
+    )
   }
 
   revalidatePath('/admin/drafts')
