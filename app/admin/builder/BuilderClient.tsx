@@ -69,6 +69,16 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
+/** Glossary filter row only — tighter than grid/dimension selects */
+const glossaryFilterSelectStyle: React.CSSProperties = {
+  ...selectStyle,
+  padding: '4px 6px',
+  fontSize: 11,
+  minWidth: 0,
+  width: 'max-content',
+  maxWidth: '100%',
+}
+
 function blankGrid(rows: number, cols: number): GridType {
   return Array.from({ length: rows }, () =>
     Array.from({ length: cols }, () => '' as Cell)
@@ -1126,79 +1136,58 @@ function RightPane({
           <div
             style={{
               display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
+              flexWrap: 'nowrap',
               alignItems: 'center',
+              gap: 4,
+              minWidth: 0,
             }}
           >
+            <FilterSelect
+              label="LEN"
+              value={lengthFilter}
+              onChange={setLengthFilter}
+              options={[
+                { v: 'auto', l: `Auto${activeSlot ? ` (${activeSlot.length})` : ''}` },
+                { v: 'any', l: 'Any' },
+                ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
+                  v: String(n),
+                  l: String(n),
+                })),
+              ]}
+            />
+            <FilterSelect
+              label="POS"
+              value={positionFilter}
+              onChange={setPositionFilter}
+              options={[
+                { v: 'contains', l: 'Contains' },
+                { v: 'starts', l: 'Starts with' },
+                { v: 'ends', l: 'Ends with' },
+              ]}
+            />
+            <FilterSelect
+              label="FRESH"
+              value={freshFilter}
+              onChange={setFreshFilter}
+              options={[
+                { v: 'any', l: 'Any' },
+                { v: 'never', l: 'Never used' },
+                { v: '30d', l: '30+ days ago' },
+              ]}
+            />
             <div
               style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 6,
-                alignItems: 'center',
-                flex: '1 1 220px',
-                minWidth: 0,
+                marginLeft: 'auto',
+                flexShrink: 0,
+                fontSize: 10,
+                fontWeight: 600,
+                color: t.textMuted,
+                lineHeight: 1,
               }}
+              title={`${results.length} match${results.length !== 1 ? 'es' : ''}`}
+              aria-label={`${results.length} matches`}
             >
-              <FilterSelect
-                label="LEN"
-                value={lengthFilter}
-                onChange={setLengthFilter}
-                options={[
-                  { v: 'auto', l: `Auto${activeSlot ? ` (${activeSlot.length})` : ''}` },
-                  { v: 'any', l: 'Any' },
-                  ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
-                    v: String(n),
-                    l: String(n),
-                  })),
-                ]}
-              />
-              <FilterSelect
-                label="POS"
-                value={positionFilter}
-                onChange={setPositionFilter}
-                options={[
-                  { v: 'contains', l: 'Contains' },
-                  { v: 'starts', l: 'Starts with' },
-                  { v: 'ends', l: 'Ends with' },
-                ]}
-              />
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 6,
-                alignItems: 'center',
-                flex: '1 1 220px',
-                justifyContent: 'flex-end',
-                minWidth: 0,
-              }}
-            >
-              <FilterSelect
-                label="FRESH"
-                value={freshFilter}
-                onChange={setFreshFilter}
-                options={[
-                  { v: 'any', l: 'Any' },
-                  { v: 'never', l: 'Never used' },
-                  { v: '30d', l: '30+ days ago' },
-                ]}
-              />
-              <div
-                style={{
-                  fontSize: 11,
-                  color: t.textMuted,
-                  fontWeight: 600,
-                  textAlign: 'right',
-                  lineHeight: 1.35,
-                  flex: '1 1 auto',
-                  minWidth: 'fit-content',
-                }}
-              >
-                {results.length} match{results.length !== 1 ? 'es' : ''}
-              </div>
+              {results.length}
             </div>
           </div>
         </div>
@@ -1244,12 +1233,12 @@ function FilterSelect({
   options: { v: string; l: string }[]
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
       <span
         style={{
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: 700,
-          letterSpacing: 1,
+          letterSpacing: 0.9,
           color: t.textMuted,
         }}
       >
@@ -1258,7 +1247,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={selectStyle}
+        style={glossaryFilterSelectStyle}
       >
         {options.map((o) => (
           <option key={o.v} value={o.v}>
