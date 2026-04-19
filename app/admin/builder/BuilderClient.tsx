@@ -185,6 +185,7 @@ export default function BuilderClient({
   )
   const [search, setSearch] = useState('')
   const [lengthFilter, setLengthFilter] = useState('auto')
+  const [positionFilter, setPositionFilter] = useState('contains')
   const [freshFilter, setFreshFilter] = useState('any')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -210,7 +211,7 @@ export default function BuilderClient({
   }, [grid, activeCell, direction])
 
   const trimmedSearch = search.trim()
-  const hasSearchQuery = trimmedSearch.length > 0
+  const hasSearch = trimmedSearch.length > 0
   const searchLower = trimmedSearch.toLowerCase()
 
   const filteredResults = useMemo(() => {
@@ -226,10 +227,6 @@ export default function BuilderClient({
       )
         return false
 
-      if (hasSearchQuery) {
-        return entry.word.toLowerCase().includes(q)
-      }
-
       if (lengthFilter === 'auto' && !activeSlot) return false
 
       const targetLen =
@@ -241,21 +238,25 @@ export default function BuilderClient({
 
       if (targetLen != null && entry.word.length !== targetLen) return false
 
-      if (
-        lengthFilter === 'auto' &&
-        activeSlot &&
-        !matchesPattern(entry.word, activeSlot.pattern)
-      ) {
-        return false
+      if (!hasSearch && lengthFilter === 'auto' && activeSlot) {
+        if (!matchesPattern(entry.word, activeSlot.pattern)) return false
+      }
+
+      if (hasSearch) {
+        const word = entry.word.toLowerCase()
+        if (positionFilter === 'starts') return word.startsWith(q)
+        if (positionFilter === 'ends') return word.endsWith(q)
+        return word.includes(q)
       }
 
       return true
     })
   }, [
     activeSlot,
-    hasSearchQuery,
+    hasSearch,
     searchLower,
     lengthFilter,
+    positionFilter,
     freshFilter,
     initialGlossary,
   ])
@@ -456,11 +457,12 @@ export default function BuilderClient({
           setSearch={setSearch}
           lengthFilter={lengthFilter}
           setLengthFilter={setLengthFilter}
+          positionFilter={positionFilter}
+          setPositionFilter={setPositionFilter}
           freshFilter={freshFilter}
           setFreshFilter={setFreshFilter}
           results={filteredResults}
           onPlaceWord={handlePlaceWord}
-          freeFormSearch={hasSearchQuery}
         />
       </div>
 
@@ -989,11 +991,12 @@ function RightPane({
   setSearch,
   lengthFilter,
   setLengthFilter,
+  positionFilter,
+  setPositionFilter,
   freshFilter,
   setFreshFilter,
   results,
   onPlaceWord,
-  freeFormSearch,
 }: {
   activeSlot: Slot | null
   direction: Direction
@@ -1001,11 +1004,12 @@ function RightPane({
   setSearch: (s: string) => void
   lengthFilter: string
   setLengthFilter: (v: string) => void
+  positionFilter: string
+  setPositionFilter: (v: string) => void
   freshFilter: string
   setFreshFilter: (v: string) => void
   results: GlossaryEntry[]
   onPlaceWord: (e: GlossaryEntry) => void
-  freeFormSearch: boolean
 }) {
   return (
     <div>
@@ -1056,11 +1060,6 @@ function RightPane({
               No cell selected
             </div>
           )}
-          {freeFormSearch ? (
-            <div style={{ fontSize: 11, color: t.textMuted, marginTop: 8, lineHeight: 1.35 }}>
-              Searching glossary — length and pattern filters off
-            </div>
-          ) : null}
         </div>
 
         {activeSlot ? (
@@ -1123,54 +1122,84 @@ function RightPane({
           />
         </div>
 
-        <div
-          style={{
-            padding: '0 16px 12px',
-            display: 'flex',
-            gap: 6,
-            alignItems: 'center',
-          }}
-        >
-          <FilterSelect
-            label="LEN"
-            value={lengthFilter}
-            onChange={setLengthFilter}
-            options={[
-              { v: 'auto', l: `Auto${activeSlot ? ` (${activeSlot.length})` : ''}` },
-              { v: 'any', l: 'Any' },
-              ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
-                v: String(n),
-                l: String(n),
-              })),
-            ]}
-          />
-          <FilterSelect
-            label="FRESH"
-            value={freshFilter}
-            onChange={setFreshFilter}
-            options={[
-              { v: 'any', l: 'Any' },
-              { v: 'never', l: 'Never used' },
-              { v: '30d', l: '30+ days ago' },
-            ]}
-          />
-          <div style={{ flex: 1 }} />
+        <div style={{ padding: '0 16px 12px' }}>
           <div
             style={{
-              fontSize: 11,
-              color: t.textMuted,
-              fontWeight: 600,
-              textAlign: 'right',
-              lineHeight: 1.35,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
             }}
           >
-            {results.length} match{results.length !== 1 ? 'es' : ''}
-            {freeFormSearch ? (
-              <>
-                {' '}
-                <span style={{ fontWeight: 500 }}>· length filter off</span>
-              </>
-            ) : null}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                alignItems: 'center',
+                flex: '1 1 220px',
+                minWidth: 0,
+              }}
+            >
+              <FilterSelect
+                label="LEN"
+                value={lengthFilter}
+                onChange={setLengthFilter}
+                options={[
+                  { v: 'auto', l: `Auto${activeSlot ? ` (${activeSlot.length})` : ''}` },
+                  { v: 'any', l: 'Any' },
+                  ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({
+                    v: String(n),
+                    l: String(n),
+                  })),
+                ]}
+              />
+              <FilterSelect
+                label="POS"
+                value={positionFilter}
+                onChange={setPositionFilter}
+                options={[
+                  { v: 'contains', l: 'Contains' },
+                  { v: 'starts', l: 'Starts with' },
+                  { v: 'ends', l: 'Ends with' },
+                ]}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                alignItems: 'center',
+                flex: '1 1 220px',
+                justifyContent: 'flex-end',
+                minWidth: 0,
+              }}
+            >
+              <FilterSelect
+                label="FRESH"
+                value={freshFilter}
+                onChange={setFreshFilter}
+                options={[
+                  { v: 'any', l: 'Any' },
+                  { v: 'never', l: 'Never used' },
+                  { v: '30d', l: '30+ days ago' },
+                ]}
+              />
+              <div
+                style={{
+                  fontSize: 11,
+                  color: t.textMuted,
+                  fontWeight: 600,
+                  textAlign: 'right',
+                  lineHeight: 1.35,
+                  flex: '1 1 auto',
+                  minWidth: 'fit-content',
+                }}
+              >
+                {results.length} match{results.length !== 1 ? 'es' : ''}
+              </div>
+            </div>
           </div>
         </div>
 
