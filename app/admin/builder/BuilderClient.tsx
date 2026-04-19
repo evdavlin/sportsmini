@@ -449,35 +449,54 @@ export default function BuilderClient({
           padding: '20px 32px 0',
           maxWidth: 1400,
           margin: '0 auto',
+          alignItems: 'stretch',
         }}
       >
-        <LeftPane
-          dims={dims}
-          setDims={setDimsAndGrid}
-          mode={mode}
-          setMode={setMode}
-          grid={grid}
-          activeCell={activeCell}
-          direction={direction}
-          onCellClick={handleCellClick}
-          glossary={initialGlossary}
-          activeSlot={activeSlot}
-          onPlaceWord={handlePlaceWord}
-        />
-        <RightPane
-          activeSlot={activeSlot}
-          direction={direction}
-          search={search}
-          setSearch={setSearch}
-          lengthFilter={lengthFilter}
-          setLengthFilter={setLengthFilter}
-          positionFilter={positionFilter}
-          setPositionFilter={setPositionFilter}
-          freshFilter={freshFilter}
-          setFreshFilter={setFreshFilter}
-          results={filteredResults}
-          onPlaceWord={handlePlaceWord}
-        />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+          }}
+        >
+          <LeftPane
+            dims={dims}
+            setDims={setDimsAndGrid}
+            mode={mode}
+            setMode={setMode}
+            grid={grid}
+            activeCell={activeCell}
+            direction={direction}
+            onCellClick={handleCellClick}
+            glossary={initialGlossary}
+            activeSlot={activeSlot}
+            onPlaceWord={handlePlaceWord}
+          />
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            minHeight: 0,
+            height: '100%',
+          }}
+        >
+          <RightPane
+            activeSlot={activeSlot}
+            direction={direction}
+            search={search}
+            setSearch={setSearch}
+            lengthFilter={lengthFilter}
+            setLengthFilter={setLengthFilter}
+            positionFilter={positionFilter}
+            setPositionFilter={setPositionFilter}
+            freshFilter={freshFilter}
+            setFreshFilter={setFreshFilter}
+            results={filteredResults}
+            onPlaceWord={handlePlaceWord}
+          />
+        </div>
       </div>
 
       <div
@@ -796,21 +815,14 @@ function WordExplorer({
     <div data-word-explorer style={{ width: '100%' }}>
       <div
         style={{
-          paddingTop: 20,
-          marginTop: 12,
-          borderTop: `1px solid ${t.borderSoft}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 14,
+          flexWrap: 'wrap',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            marginBottom: 14,
-            flexWrap: 'wrap',
-          }}
-        >
           <div
             style={{
               fontSize: 10,
@@ -1021,7 +1033,6 @@ function WordExplorer({
         >
           Showing {Math.min(40, total)} of {total}
         </div>
-      </div>
     </div>
   )
 }
@@ -1091,22 +1102,29 @@ function LeftPane({
           borderRadius: 6,
           padding: '20px 20px 18px',
           display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'stretch',
-          gap: 0,
+          justifyContent: 'center',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <GridView
-            grid={grid}
-            dims={dims}
-            numbering={numbering}
-            activeCell={activeCell}
-            activeWordCells={activeWordCells}
-            mode={mode}
-            onCellClick={onCellClick}
-          />
-        </div>
+        <GridView
+          grid={grid}
+          dims={dims}
+          numbering={numbering}
+          activeCell={activeCell}
+          activeWordCells={activeWordCells}
+          mode={mode}
+          onCellClick={onCellClick}
+        />
+      </div>
+
+      <div
+        style={{
+          marginTop: 18,
+          background: t.surface,
+          border: `1px solid ${t.border}`,
+          borderRadius: 6,
+          padding: '18px 20px 16px',
+        }}
+      >
         <WordExplorer glossary={glossary} activeSlot={activeSlot} onPlaceWord={onPlaceWord} />
       </div>
     </div>
@@ -1340,9 +1358,18 @@ function RightPane({
   onPlaceWord: (e: GlossaryEntry) => void
 }) {
   return (
-    <div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        width: '100%',
+      }}
+    >
       <div
         style={{
+          flexShrink: 0,
           background: t.surface,
           border: `1px solid ${t.border}`,
           borderRadius: 6,
@@ -1425,12 +1452,16 @@ function RightPane({
 
       <div
         style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
           background: t.surface,
           border: `1px solid ${t.border}`,
           borderRadius: 6,
         }}
       >
-        <div style={{ padding: '14px 16px 10px' }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px 10px' }}>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1450,7 +1481,7 @@ function RightPane({
           />
         </div>
 
-        <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ flexShrink: 0, padding: '0 16px 12px' }}>
           <div
             style={{
               display: 'flex',
@@ -1512,8 +1543,9 @@ function RightPane({
 
         <div
           style={{
+            flex: 1,
+            minHeight: 0,
             borderTop: `1px solid ${t.borderSoft}`,
-            maxHeight: 440,
             overflowY: 'auto',
           }}
         >
