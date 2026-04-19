@@ -10,7 +10,11 @@ import React, {
 import { useRouter } from 'next/navigation'
 
 import type { SavePayload } from '@/lib/builder-actions'
-import { deleteDraftFromBuilderAction, saveDraftAction } from '@/lib/builder-actions'
+import {
+  addGlossaryEntryAction,
+  deleteDraftFromBuilderAction,
+  saveDraftAction,
+} from '@/lib/builder-actions'
 import type {
   Cell,
   Direction,
@@ -200,14 +204,15 @@ export default function BuilderClient({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [glossary, setGlossary] = useState<GlossaryEntry[]>(() => initialGlossary)
 
   const numbering = useMemo(() => computeNumbering(grid), [grid])
 
   const clueMap = useMemo(() => new Map(Object.entries(clueBySlot)), [clueBySlot])
 
   const placedWords = useMemo(
-    () => derivePlacedWords(grid, numbering, initialGlossary, clueMap),
-    [grid, numbering, initialGlossary, clueMap]
+    () => derivePlacedWords(grid, numbering, glossary, clueMap),
+    [grid, numbering, glossary, clueMap]
   )
 
   const validation = useMemo(
@@ -228,7 +233,7 @@ export default function BuilderClient({
     // TODO Sprint 5: use useDeferredValue or precomputed indexes if profiling shows jank
     const q = searchLower
 
-    return initialGlossary.filter((entry) => {
+    return glossary.filter((entry) => {
       if (freshFilter === 'never' && entry.lastUsedAt !== null) return false
       if (
         freshFilter === '30d' &&
@@ -268,8 +273,12 @@ export default function BuilderClient({
     lengthFilter,
     positionFilter,
     freshFilter,
-    initialGlossary,
+    glossary,
   ])
+
+  const handleGlossaryEntryAdded = useCallback((entry: GlossaryEntry) => {
+    setGlossary((prev) => [...prev, entry])
+  }, [])
 
   const errorCount = validation.errors.length
 
@@ -461,7 +470,7 @@ export default function BuilderClient({
           activeCell={activeCell}
           direction={direction}
           onCellClick={handleCellClick}
-          glossary={initialGlossary}
+          glossary={glossary}
           activeSlot={activeSlot}
           onPlaceWord={handlePlaceWord}
         />
@@ -491,7 +500,12 @@ export default function BuilderClient({
           margin: '0 auto',
         }}
       >
-        <PlacedWordsPanel placedWords={placedWords} onClueEdit={handleClueSlotEdit} />
+        <PlacedWordsPanel
+          placedWords={placedWords}
+          glossary={glossary}
+          onClueEdit={handleClueSlotEdit}
+          onGlossaryEntryAdded={handleGlossaryEntryAdded}
+        />
         <ValidationPanel errors={validation.errors} warnings={validation.warnings} />
       </div>
     </div>
@@ -1667,11 +1681,33 @@ function GlossaryResult({
 
 function PlacedWordsPanel({
   placedWords,
+  glossary,
   onClueEdit,
+  onGlossaryEntryAdded,
 }: {
   placedWords: PlacedWord[]
+  glossary: GlossaryEntry[]
   onClueEdit: (slotKey: string, clue: string) => void
+  onGlossaryEntryAdded: (entry: GlossaryEntry) => void
 }) {
+  const [openAddFormKey, setOpenAddFormKey] = useState<string | null>(null)
+
+  const typeOptions = useMemo(
+    () => Array.from(new Set(glossary.map((e) => e.type))).filter(Boolean).sort(),
+    [glossary]
+  )
+  const sportOptions = useMemo(
+    () => Array.from(new Set(glossary.map((e) => e.sport))).filter(Boolean).sort(),
+    [glossary]
+  )
+
+  useEffect(() => {
+    if (openAddFormKey == null) return
+    if (!placedWords.some((p) => p.key === openAddFormKey)) {
+      setOpenAddFormKey(null)
+    }
+  }, [placedWords, openAddFormKey])
+
   const across = placedWords
     .filter((p) => p.direction === 'across')
     .sort((a, b) => a.number - b.number)
@@ -1726,9 +1762,27 @@ function PlacedWordsPanel({
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-        <ClueColumn label="ACROSS" items={across} onClueEdit={onClueEdit} />
+        <ClueColumn
+          label="ACROSS"
+          items={across}
+          onClueEdit={onClueEdit}
+          typeOptions={typeOptions}
+          sportOptions={sportOptions}
+          openAddFormKey={openAddFormKey}
+          setOpenAddFormKey={setOpenAddFormKey}
+          onGlossaryEntryAdded={onGlossaryEntryAdded}
+        />
         <div style={{ borderLeft: `1px solid ${t.borderSoft}` }}>
-          <ClueColumn label="DOWN" items={down} onClueEdit={onClueEdit} />
+          <ClueColumn
+            label="DOWN"
+            items={down}
+            onClueEdit={onClueEdit}
+            typeOptions={typeOptions}
+            sportOptions={sportOptions}
+            openAddFormKey={openAddFormKey}
+            setOpenAddFormKey={setOpenAddFormKey}
+            onGlossaryEntryAdded={onGlossaryEntryAdded}
+          />
         </div>
       </div>
     </div>
@@ -1739,10 +1793,20 @@ function ClueColumn({
   label,
   items,
   onClueEdit,
+  typeOptions,
+  sportOptions,
+  openAddFormKey,
+  setOpenAddFormKey,
+  onGlossaryEntryAdded,
 }: {
   label: string
   items: PlacedWord[]
   onClueEdit: (slotKey: string, clue: string) => void
+  typeOptions: string[]
+  sportOptions: string[]
+  openAddFormKey: string | null
+  setOpenAddFormKey: (k: string | null) => void
+  onGlossaryEntryAdded: (entry: GlossaryEntry) => void
 }) {
   return (
     <div>
@@ -1770,26 +1834,97 @@ function ClueColumn({
         </div>
       ) : (
         items.map((item) => (
-          <PlacedWordRow key={item.key} item={item} onClueEdit={onClueEdit} />
+          <PlacedWordRow
+            key={item.key}
+            item={item}
+            onClueEdit={onClueEdit}
+            typeOptions={typeOptions}
+            sportOptions={sportOptions}
+            openAddFormKey={openAddFormKey}
+            setOpenAddFormKey={setOpenAddFormKey}
+            onGlossaryEntryAdded={onGlossaryEntryAdded}
+          />
         ))
       )}
     </div>
   )
 }
 
+const inputCompact: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  fontSize: 12,
+  color: t.text,
+  background: t.surfaceAlt,
+  border: `1px solid ${t.border}`,
+  borderRadius: 3,
+  outline: 'none',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
+}
+
 function PlacedWordRow({
   item,
   onClueEdit,
+  typeOptions,
+  sportOptions,
+  openAddFormKey,
+  setOpenAddFormKey,
+  onGlossaryEntryAdded,
 }: {
   item: PlacedWord
   onClueEdit: (slotKey: string, clue: string) => void
+  typeOptions: string[]
+  sportOptions: string[]
+  openAddFormKey: string | null
+  setOpenAddFormKey: (k: string | null) => void
+  onGlossaryEntryAdded: (entry: GlossaryEntry) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draftClue, setDraftClue] = useState(item.clueText)
+  const [formClue, setFormClue] = useState(item.clueText)
+  const [formType, setFormType] = useState('')
+  const [formSport, setFormSport] = useState('')
+  const [formTeam, setFormTeam] = useState('')
+  const [formAlt, setFormAlt] = useState('')
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [successFlash, setSuccessFlash] = useState(false)
+  const formOpen = openAddFormKey === item.key
+  const listSafe = item.key.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const wasFormOpenRef = useRef(false)
 
   useEffect(() => {
     setDraftClue(item.clueText)
   }, [item.key, item.clueText])
+
+  useEffect(() => {
+    const nowOpen = openAddFormKey === item.key
+    if (nowOpen && !wasFormOpenRef.current) {
+      setFormClue(item.clueText)
+      setFormType('')
+      setFormSport('')
+      setFormTeam('')
+      setFormAlt('')
+      setSubmitError(null)
+    }
+    wasFormOpenRef.current = nowOpen
+  }, [openAddFormKey, item.key])
+
+  useEffect(() => {
+    if (!formOpen) return
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenAddFormKey(null)
+    }
+    document.addEventListener('keydown', onDocKey)
+    return () => document.removeEventListener('keydown', onDocKey)
+  }, [formOpen, setOpenAddFormKey])
+
+  useEffect(() => {
+    if (!successFlash) return
+    const id = window.setTimeout(() => setSuccessFlash(false), 2000)
+    return () => window.clearTimeout(id)
+  }, [successFlash])
 
   const sourceStyles: Record<
     PlacedWord['source'],
@@ -1806,6 +1941,42 @@ function PlacedWordRow({
   function commit() {
     onClueEdit(slotKey, draftClue)
     setEditing(false)
+  }
+
+  const clueOk = formClue.trim().length > 0
+  const typeOk = formType.trim().length > 0
+  const sportOk = formSport.trim().length > 0
+  const teamOk = formTeam.length <= 40
+  const altOk = formAlt.length <= 60
+  const canSubmit =
+    clueOk && typeOk && sportOk && teamOk && altOk && !submitting
+
+  async function submitGlossary() {
+    if (!canSubmit) return
+    setSubmitError(null)
+    setSubmitting(true)
+    const res = await addGlossaryEntryAction({
+      word: item.word,
+      clue: formClue,
+      type: formType,
+      sport: formSport,
+      team: formTeam.trim() || null,
+      alternate_name: formAlt.trim() || null,
+    })
+    setSubmitting(false)
+    if (!res.ok) {
+      setSubmitError(res.error)
+      return
+    }
+    onClueEdit(slotKey, formClue.trim())
+    onGlossaryEntryAdded(res.entry)
+    setOpenAddFormKey(null)
+    setSuccessFlash(true)
+  }
+
+  function updateFormClue(v: string) {
+    setFormClue(v)
+    onClueEdit(slotKey, v)
   }
 
   return (
@@ -1892,7 +2063,15 @@ function PlacedWordRow({
             {item.clueText}
           </div>
         )}
-        <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
+        <div
+          style={{
+            marginTop: 4,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           <span
             style={{
               fontSize: 9,
@@ -1907,7 +2086,220 @@ function PlacedWordRow({
           >
             {srcStyle.label}
           </span>
+          {item.source === 'new-word' ? (
+            <button
+              type="button"
+              onClick={() => setOpenAddFormKey(formOpen ? null : item.key)}
+              style={{
+                padding: 0,
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                color: t.hero,
+                textDecoration: 'underline',
+                fontFamily: 'inherit',
+              }}
+            >
+              Add to glossary
+            </button>
+          ) : null}
+          {successFlash ? (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: t.success,
+                opacity: successFlash ? 1 : 0,
+                transition: 'opacity 0.4s ease',
+              }}
+            >
+              Added to glossary
+            </span>
+          ) : null}
         </div>
+
+        {formOpen ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              background: t.surfaceAlt,
+              border: `1px solid ${t.borderSoft}`,
+              borderRadius: 4,
+            }}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '8px 12px',
+                alignItems: 'start',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Word
+                </div>
+                <input readOnly value={item.word} style={{ ...inputCompact, fontWeight: 700 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Length
+                </div>
+                <input readOnly value={String(item.word.length)} style={inputCompact} />
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Clue
+                </div>
+                <input
+                  value={formClue}
+                  onChange={(e) => updateFormClue(e.target.value)}
+                  style={{
+                    ...inputCompact,
+                    borderColor: clueOk ? t.border : t.error,
+                  }}
+                />
+                {!clueOk ? (
+                  <div style={{ fontSize: 10, color: t.error, marginTop: 4 }}>Clue is required</div>
+                ) : null}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Type
+                </div>
+                <input
+                  list={`glossary-types-${listSafe}`}
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value)}
+                  placeholder="e.g. player, team, stat..."
+                  style={{
+                    ...inputCompact,
+                    borderColor: typeOk ? t.border : t.error,
+                  }}
+                />
+                <datalist id={`glossary-types-${listSafe}`}>
+                  {typeOptions.map((x) => (
+                    <option key={x} value={x} />
+                  ))}
+                </datalist>
+                {!typeOk ? (
+                  <div style={{ fontSize: 10, color: t.error, marginTop: 4 }}>Type is required</div>
+                ) : null}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Sport
+                </div>
+                <input
+                  list={`glossary-sports-${listSafe}`}
+                  value={formSport}
+                  onChange={(e) => setFormSport(e.target.value)}
+                  placeholder="e.g. NBA, NFL..."
+                  style={{
+                    ...inputCompact,
+                    borderColor: sportOk ? t.border : t.error,
+                  }}
+                />
+                <datalist id={`glossary-sports-${listSafe}`}>
+                  {sportOptions.map((x) => (
+                    <option key={x} value={x} />
+                  ))}
+                </datalist>
+                {!sportOk ? (
+                  <div style={{ fontSize: 10, color: t.error, marginTop: 4 }}>Sport is required</div>
+                ) : null}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Team <span style={{ fontWeight: 500 }}>(optional)</span>
+                </div>
+                <input
+                  value={formTeam}
+                  onChange={(e) => setFormTeam(e.target.value)}
+                  style={{
+                    ...inputCompact,
+                    borderColor: teamOk ? t.border : t.error,
+                  }}
+                />
+                {!teamOk ? (
+                  <div style={{ fontSize: 10, color: t.error, marginTop: 4 }}>Max 40 characters</div>
+                ) : null}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, marginBottom: 4 }}>
+                  Alternate name <span style={{ fontWeight: 500 }}>(optional)</span>
+                </div>
+                <input
+                  value={formAlt}
+                  onChange={(e) => setFormAlt(e.target.value)}
+                  style={{
+                    ...inputCompact,
+                    borderColor: altOk ? t.border : t.error,
+                  }}
+                />
+                {!altOk ? (
+                  <div style={{ fontSize: 10, color: t.error, marginTop: 4 }}>Max 60 characters</div>
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 8,
+                  marginTop: 4,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenAddFormKey(null)}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: `1px solid ${t.border}`,
+                    background: t.surface,
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={() => void submitGlossary()}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    border: `1px solid ${t.hero}`,
+                    background: canSubmit ? t.hero : t.borderSoft,
+                    color: canSubmit ? '#fff' : t.textMuted,
+                    borderRadius: 3,
+                    cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Add to glossary
+                </button>
+              </div>
+            </div>
+            {submitError ? (
+              <div style={{ fontSize: 11, color: t.error, marginTop: 10 }}>{submitError}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

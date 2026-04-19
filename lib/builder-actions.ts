@@ -2,7 +2,61 @@
 
 import { revalidatePath } from 'next/cache'
 
+import type { GlossaryEntry } from '@/lib/crossword'
 import { supabaseService } from '@/lib/supabase-service'
+
+function computeDaysSince(iso: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  return Math.floor((Date.now() - t) / 86400000)
+}
+
+function mapGlossaryRow(row: Record<string, unknown>): GlossaryEntry {
+  const lastUsedAt = (row.last_used_at as string | null) ?? null
+  return {
+    id: String(row.id),
+    word: String(row.word ?? ''),
+    clue: String(row.clue ?? ''),
+    sport: String(row.sport ?? ''),
+    type: String(row.type ?? ''),
+    team: row.team != null ? String(row.team) : null,
+    length: Number(row.length ?? 0),
+    lastUsedAt,
+    daysSinceUse: computeDaysSince(lastUsedAt),
+  }
+}
+
+export async function addGlossaryEntryAction(payload: {
+  word: string
+  clue: string
+  type: string
+  sport: string
+  team: string | null
+  alternate_name: string | null
+}): Promise<{ ok: true; entry: GlossaryEntry } | { ok: false; error: string }> {
+  const word = payload.word.toUpperCase()
+  const insert: Record<string, unknown> = {
+    word,
+    clue: payload.clue.trim(),
+    type: payload.type.trim(),
+    sport: payload.sport.trim(),
+    team: payload.team?.trim() || null,
+    length: word.length,
+  }
+  const alt = payload.alternate_name?.trim()
+  if (alt) insert.alternate_name = alt
+
+  const { data, error } = await supabaseService
+    .from('crossword_glossary')
+    .insert(insert)
+    .select()
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  if (!data || typeof data !== 'object') return { ok: false, error: 'No row returned' }
+  return { ok: true, entry: mapGlossaryRow(data as Record<string, unknown>) }
+}
 
 export type SavePayload = {
   title: string
