@@ -105,6 +105,29 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
           >
             BEGIN
           </Link>
+
+          <button
+            type="button"
+            onClick={() => router.push('/howto')}
+            style={{
+              display: 'block',
+              margin: '20px auto 0',
+              padding: 0,
+              background: 'transparent',
+              border: 'none',
+              color: theme.text,
+              fontSize: 12,
+              fontWeight: 500,
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            How to play
+          </button>
         </div>
       </div>
     </div>
