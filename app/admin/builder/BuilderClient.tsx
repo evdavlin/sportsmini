@@ -232,17 +232,24 @@ export default function BuilderClient({
         )
       }
 
-      if (!activeSlot) return false
+      if (lengthFilter === 'auto' && !activeSlot) return false
 
       const targetLen =
         lengthFilter === 'auto'
-          ? activeSlot.length
+          ? activeSlot?.length ?? null
           : lengthFilter === 'any'
             ? null
             : parseInt(lengthFilter, 10)
 
-      if (targetLen && entry.word.length !== targetLen) return false
-      if (!matchesPattern(entry.word, activeSlot.pattern)) return false
+      if (targetLen != null && entry.word.length !== targetLen) return false
+
+      if (
+        lengthFilter === 'auto' &&
+        activeSlot &&
+        !matchesPattern(entry.word, activeSlot.pattern)
+      ) {
+        return false
+      }
 
       return true
     })
