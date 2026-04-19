@@ -331,6 +331,14 @@ export default function BuilderClient({
   }
 
   function handleRootKeyDown(e: React.KeyboardEvent) {
+    const target = e.target as HTMLElement
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target.isContentEditable
+    ) {
+      return
+    }
     if (mode !== 'fill' || !activeCell) return
     const [r, c] = activeCell
 
