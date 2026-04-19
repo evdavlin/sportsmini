@@ -67,22 +67,6 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
         <AppHeader streak={streak} />
 
         <div style={{ padding: '48px 28px 40px', textAlign: 'center' }}>
-          <div
-            style={{
-              display: 'inline-block',
-              padding: '6px 14px',
-              border: `1px solid ${theme.text}`,
-              borderRadius: 20,
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: 2,
-              color: theme.text,
-              marginBottom: 32,
-            }}
-          >
-            TODAY&apos;S MINI
-          </div>
-
           <h1
             style={{
               fontFamily: 'Georgia, "Times New Roman", serif',
@@ -97,17 +81,7 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
             {displayEditorialTitle(puzzle.title)}
           </h1>
 
-          <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 6 }}>{dateLine}</div>
-          <div
-            style={{
-              color: theme.textMuted,
-              fontSize: 13,
-              fontStyle: 'italic',
-              marginBottom: 44,
-            }}
-          >
-            Edited by Evan Lin
-          </div>
+          <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 32 }}>{dateLine}</div>
 
           <div style={{ marginBottom: 40 }}>
             <GridDisplay data={previewGrid} size={140} />
@@ -131,10 +105,6 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
           >
             BEGIN
           </Link>
-
-          <div style={{ color: theme.textMuted, fontSize: 12, marginTop: 32 }}>
-            🔥 {streak}-day streak · don&apos;t break it
-          </div>
         </div>
       </div>
     </div>

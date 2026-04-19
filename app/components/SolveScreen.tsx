@@ -683,7 +683,7 @@ export default function SolveScreen({
         backgroundColor: theme.bg,
         color: theme.text,
         fontFamily: 'system-ui, sans-serif',
-        paddingBottom: 24,
+        paddingBottom: 12,
       }}
     >
       {previewMode && !suppressPreviewBanner ? (
@@ -755,7 +755,7 @@ export default function SolveScreen({
           puzzleMeta={metaCenter}
         />
 
-        <div style={{ padding: '16px 8px 12px' }}>
+        <div style={{ padding: '6px 8px 6px' }}>
           <GridDisplay
             data={gridData}
             size={GRID_SIZE}
@@ -768,7 +768,7 @@ export default function SolveScreen({
 
         <div
           style={{
-            minHeight: 28,
+            minHeight: 22,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -776,7 +776,7 @@ export default function SolveScreen({
             fontWeight: 700,
             letterSpacing: 2,
             color: statusLine.color,
-            marginTop: 12,
+            marginTop: 6,
           }}
         >
           {statusLine.text}
@@ -785,11 +785,11 @@ export default function SolveScreen({
         {displayClue ? (
           <div
             style={{
-              marginTop: 8,
+              marginTop: 4,
               backgroundColor: theme.heroTint,
               borderTop: `1px solid ${theme.borderSoft}`,
               borderBottom: `1px solid ${theme.borderSoft}`,
-              padding: '14px 16px',
+              padding: '10px 16px',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
@@ -818,7 +818,7 @@ export default function SolveScreen({
           </div>
         ) : null}
 
-        <div style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ padding: '6px 10px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
             {row1.map((k) => (
               <div
@@ -829,7 +829,7 @@ export default function SolveScreen({
                 style={{
                   flex: 1,
                   maxWidth: 40,
-                  height: 42,
+                  height: 38,
                   borderRadius: 6,
                   backgroundColor: theme.keyBg,
                   border: `1px solid ${theme.borderSoft}`,
@@ -866,7 +866,7 @@ export default function SolveScreen({
                 style={{
                   flex: 1,
                   maxWidth: 40,
-                  height: 42,
+                  height: 38,
                   borderRadius: 6,
                   backgroundColor: theme.keyBg,
                   border: `1px solid ${theme.borderSoft}`,
@@ -894,7 +894,7 @@ export default function SolveScreen({
                 style={{
                   flex: 1,
                   maxWidth: 40,
-                  height: 42,
+                  height: 38,
                   borderRadius: 6,
                   backgroundColor: theme.keyBg,
                   border: `1px solid ${theme.borderSoft}`,
@@ -919,7 +919,7 @@ export default function SolveScreen({
                 flex: 1.5,
                 maxWidth: 50,
                 minWidth: 0,
-                height: 42,
+                height: 38,
                 borderRadius: 6,
                 backgroundColor: theme.keyBg,
                 border: `1px solid ${theme.borderSoft}`,
@@ -940,10 +940,10 @@ export default function SolveScreen({
 
         <div
           style={{
-            padding: '8px 20px 20px',
+            padding: '4px 10px 12px',
             display: 'flex',
             flexWrap: 'wrap',
-            gap: 10,
+            gap: 6,
             justifyContent: 'center',
           }}
         >
@@ -954,16 +954,18 @@ export default function SolveScreen({
               flex: 1,
               minWidth: 72,
               maxWidth: 100,
+              minHeight: 38,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
-              padding: '12px 0',
-              fontSize: 11,
+              padding: '0 4px',
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: 2,
               borderRadius: 4,
               cursor: 'pointer',
               fontFamily: 'system-ui, sans-serif',
+              boxSizing: 'border-box',
             }}
           >
             CHECK
@@ -976,17 +978,19 @@ export default function SolveScreen({
               flex: 1,
               minWidth: 72,
               maxWidth: 100,
+              minHeight: 38,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
-              padding: '12px 0',
-              fontSize: 11,
+              padding: '0 4px',
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: 2,
               borderRadius: 4,
               cursor: previewMode ? 'not-allowed' : 'pointer',
               opacity: previewMode ? 0.4 : 1,
               fontFamily: 'system-ui, sans-serif',
+              boxSizing: 'border-box',
             }}
           >
             HINT
@@ -998,16 +1002,18 @@ export default function SolveScreen({
               flex: 1,
               minWidth: 72,
               maxWidth: 100,
+              minHeight: 38,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
-              padding: '12px 0',
-              fontSize: 11,
+              padding: '0 4px',
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: 2,
               borderRadius: 4,
               cursor: 'pointer',
               fontFamily: 'system-ui, sans-serif',
+              boxSizing: 'border-box',
             }}
           >
             REVEAL
@@ -1019,16 +1025,18 @@ export default function SolveScreen({
               flex: 1,
               minWidth: 72,
               maxWidth: 100,
+              minHeight: 38,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
-              padding: '12px 0',
-              fontSize: 11,
+              padding: '0 4px',
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: 2,
               borderRadius: 4,
               cursor: 'pointer',
               fontFamily: 'system-ui, sans-serif',
+              boxSizing: 'border-box',
             }}
           >
             CLEAR

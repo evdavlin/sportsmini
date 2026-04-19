@@ -291,19 +291,13 @@ export function AppHeader({
     <>
       <div
         style={{
-          padding: '14px 20px 10px',
+          padding: '10px 20px 6px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
-        <Link
-          href="/"
-          aria-label="Home"
-          style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}
-        >
-          <MenuIcon color={theme.text} />
-        </Link>
+        <div style={{ width: 44, minWidth: 44, flexShrink: 0 }} aria-hidden />
         <div
           style={{
             fontFamily: 'Georgia, "Times New Roman", serif',
@@ -337,7 +331,7 @@ export function AppHeader({
       {showTimer ? (
         <div
           style={{
-            padding: '10px 20px',
+            padding: '6px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
