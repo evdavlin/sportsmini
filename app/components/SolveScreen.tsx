@@ -7,6 +7,7 @@ import type { PuzzleClue, PuzzlePayload } from '@/lib/puzzles'
 import { supabase } from '@/lib/supabase'
 import { getDeviceId, touchDevice } from '@/lib/device'
 import {
+  addHintedCell,
   getTodaySolve,
   savePreviewSolve,
   saveTodaySolve,
@@ -104,16 +105,18 @@ export default function SolveScreen({
   stateRef.current = { selectedCell, direction, entered, wrongCells, status }
 
   const completionRef = useRef(false)
+  const hintsUsedRef = useRef(0)
+  const hintedCellsRef = useRef<string[]>([])
 
   useEffect(() => {
     if (!previewMode) {
-      setStreak(getMockStats(getTodaySolve(puzzle.publish_date)).streak)
+      setStreak(getMockStats(getTodaySolve(puzzle.publish_date), puzzle.publish_date).streak)
     }
   }, [puzzle.publish_date, previewMode])
 
   useEffect(() => {
     if (previewMode) return
-    if (getTodaySolve(puzzle.publish_date)) {
+    if (getTodaySolve(puzzle.publish_date)?.completed) {
       router.replace('/waiting')
     }
   }, [puzzle.publish_date, router, previewMode])
@@ -251,29 +254,28 @@ export default function SolveScreen({
     if (!isSolved || completionRef.current) return
     completionRef.current = true
     const st = stateRef.current.status
-    const ent = { ...stateRef.current.entered }
 
     if (previewMode) {
       savePreviewSolve(puzzle.puzzle_id, {
-        puzzle_id: puzzle.puzzle_id,
-        publish_date: puzzle.publish_date,
-        time_seconds: elapsedSeconds,
-        hints_used: st === 'revealed' ? 1 : 0,
-        entered: ent,
-        solved_at: new Date().toISOString(),
+        completed: true,
+        timeSeconds: elapsedSeconds,
+        hintsUsed: hintsUsedRef.current,
+        wasRevealed: st === 'revealed',
+        hintedCells: [...hintedCellsRef.current],
+        solvedAt: new Date().toISOString(),
       })
       setPreviewDoneSeconds(elapsedSeconds)
       onPreviewSolveComplete?.(elapsedSeconds)
       return
     }
 
-    saveTodaySolve({
-      puzzle_id: puzzle.puzzle_id,
-      publish_date: puzzle.publish_date,
-      time_seconds: elapsedSeconds,
-      hints_used: st === 'revealed' ? 999 : 0,
-      entered: ent,
-      solved_at: new Date().toISOString(),
+    saveTodaySolve(puzzle.publish_date, {
+      completed: true,
+      timeSeconds: elapsedSeconds,
+      hintsUsed: hintsUsedRef.current,
+      wasRevealed: st === 'revealed',
+      hintedCells: [...hintedCellsRef.current],
+      solvedAt: new Date().toISOString(),
     })
 
     const did = deviceIdRef.current ?? getDeviceId()
@@ -282,7 +284,7 @@ export default function SolveScreen({
       .update({
         solved_at: new Date().toISOString(),
         time_seconds: elapsedSeconds,
-        hints_used: st === 'revealed' ? 1 : 0,
+        hints_used: hintsUsedRef.current,
         was_revealed: st === 'revealed',
       })
       .eq('puzzle_id', puzzle.puzzle_id)
@@ -541,6 +543,8 @@ export default function SolveScreen({
     completionRef.current = false
     sessionStartedRef.current = false
     deviceIdRef.current = null
+    hintsUsedRef.current = 0
+    hintedCellsRef.current = []
     setStartTime(null)
     setElapsedSeconds(0)
   }
@@ -561,15 +565,38 @@ export default function SolveScreen({
     else setStatus('all-correct')
   }
 
+  const runHintCell = () => {
+    if (previewMode) return
+    const sel = selectedCell
+    if (!sel) return
+    const { row: r, col: c } = sel
+    if (isBlackCell(r, c)) return
+    const k = cellKey(r, c)
+    const hyphenKey = `${r}-${c}`
+    if ((entered[k] ?? '') === solutionLetter(r, c)) return
+    touchStart()
+    hintsUsedRef.current += 1
+    if (!hintedCellsRef.current.includes(hyphenKey)) hintedCellsRef.current.push(hyphenKey)
+    addHintedCell(puzzle.publish_date, hyphenKey)
+    setEntered((prev) => ({ ...prev, [k]: solutionLetter(r, c) }))
+    setWrongCells((w) => removeWrongKey(w, k))
+  }
+
   const runReveal = () => {
     touchStart()
     const next: Record<string, string> = {}
+    const keys: string[] = []
     for (let r = 0; r < puzzle.height; r++) {
       for (let c = 0; c < puzzle.width; c++) {
         if (puzzle.grid[r][c] === '#') continue
-        next[cellKey(r, c)] = solutionLetter(r, c)
+        const k = cellKey(r, c)
+        next[k] = solutionLetter(r, c)
+        keys.push(`${r}-${c}`)
       }
     }
+    hintsUsedRef.current = keys.length
+    hintedCellsRef.current = keys
+    for (const hk of keys) addHintedCell(puzzle.publish_date, hk)
     setEntered(next)
     setWrongCells(new Set())
     setStatus('revealed')
@@ -915,6 +942,7 @@ export default function SolveScreen({
           style={{
             padding: '8px 20px 20px',
             display: 'flex',
+            flexWrap: 'wrap',
             gap: 10,
             justifyContent: 'center',
           }}
@@ -924,7 +952,8 @@ export default function SolveScreen({
             onClick={runCheck}
             style={{
               flex: 1,
-              maxWidth: 110,
+              minWidth: 72,
+              maxWidth: 100,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
@@ -941,10 +970,34 @@ export default function SolveScreen({
           </button>
           <button
             type="button"
+            onClick={runHintCell}
+            disabled={previewMode}
+            style={{
+              flex: 1,
+              minWidth: 72,
+              maxWidth: 100,
+              background: 'transparent',
+              border: `1px solid ${theme.text}`,
+              color: theme.text,
+              padding: '12px 0',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              borderRadius: 4,
+              cursor: previewMode ? 'not-allowed' : 'pointer',
+              opacity: previewMode ? 0.4 : 1,
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            HINT
+          </button>
+          <button
+            type="button"
             onClick={runReveal}
             style={{
               flex: 1,
-              maxWidth: 110,
+              minWidth: 72,
+              maxWidth: 100,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,
@@ -964,7 +1017,8 @@ export default function SolveScreen({
             onClick={runClear}
             style={{
               flex: 1,
-              maxWidth: 110,
+              minWidth: 72,
+              maxWidth: 100,
               background: 'transparent',
               border: `1px solid ${theme.text}`,
               color: theme.text,

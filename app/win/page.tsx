@@ -1,4 +1,4 @@
-import WinScreen from '@/app/components/WinScreen'
+import WinPageClient from '@/app/win/WinPageClient'
 import { getTodaysPuzzle } from '@/lib/puzzles'
 
 export default async function WinPage() {
@@ -12,7 +12,7 @@ export default async function WinPage() {
     )
   }
 
-  return <WinScreen puzzle={puzzle} />
+  return <WinPageClient puzzle={puzzle} />
 }
 
 export const revalidate = 0

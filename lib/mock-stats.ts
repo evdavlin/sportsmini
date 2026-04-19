@@ -1,4 +1,4 @@
-import type { TodaySolve } from '@/lib/progress'
+import type { SolveState } from '@/lib/progress'
 
 export type MockStats = {
   streak: number
@@ -29,11 +29,12 @@ function percentileFromTime(seconds: number): number {
   return Math.min(35, Math.max(8, Math.floor(seconds / 10)))
 }
 
-export function getMockStats(todaySolve: TodaySolve | null): MockStats {
-  if (todaySolve) {
-    const rank = `Top ${percentileFromTime(todaySolve.time_seconds)}%`
+export function getMockStats(solve: SolveState | null, publishDate?: string): MockStats {
+  if (solve?.completed) {
+    const rank = `Top ${percentileFromTime(solve.timeSeconds)}%`
     const dateShort = (() => {
-      const [y, mo, d] = todaySolve.publish_date.split('-').map(Number)
+      if (!publishDate) return ''
+      const [y, mo, d] = publishDate.split('-').map(Number)
       const dt = new Date(Date.UTC(y, mo - 1, d))
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
       return `${months[dt.getUTCMonth()]} ${dt.getUTCDate()}`
@@ -44,12 +45,12 @@ export function getMockStats(todaySolve: TodaySolve | null): MockStats {
       bestStreak: 1,
       played: 1,
       winRate: 100,
-      avgSeconds: todaySolve.time_seconds,
+      avgSeconds: solve.timeSeconds,
       distribution: DISTRIBUTION,
       recentDays: [
         {
           date: dateShort,
-          time: formatTimeShort(todaySolve.time_seconds),
+          time: formatTimeShort(solve.timeSeconds),
           rank,
           streak: true,
         },

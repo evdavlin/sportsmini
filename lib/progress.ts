@@ -1,31 +1,89 @@
-export type TodaySolve = {
-  puzzle_id: string
-  publish_date: string
-  time_seconds: number
-  hints_used: number
-  entered: Record<string, string>
-  solved_at: string
+export type SolveState = {
+  completed: boolean
+  timeSeconds: number
+  hintsUsed: number
+  wasRevealed: boolean
+  hintedCells: string[]
+  solvedAt: string
 }
+
+/** @deprecated Use SolveState — alias for legacy imports */
+export type TodaySolve = SolveState & { publish_date?: string }
 
 function storageKey(publishDate: string): string {
   return `sportsmini:solve:${publishDate}`
 }
 
-export function getTodaySolve(publishDate: string): TodaySolve | null {
+function migrateLegacyJson(raw: Record<string, unknown>): SolveState {
+  const timeSeconds = Number(
+    raw.timeSeconds ?? raw.time_seconds ?? 0
+  )
+  const hintsLegacy = Number(raw.hintsUsed ?? raw.hints_used ?? 0)
+  const wasRevealed = Boolean(
+    raw.wasRevealed ?? raw.was_revealed ?? hintsLegacy >= 999
+  )
+  const hintedCells = Array.isArray(raw.hintedCells)
+    ? (raw.hintedCells as unknown[]).map(String)
+    : []
+  const solvedAt =
+    typeof raw.solvedAt === 'string'
+      ? raw.solvedAt
+      : typeof raw.solved_at === 'string'
+        ? raw.solved_at
+        : ''
+  const completed =
+    typeof raw.completed === 'boolean'
+      ? raw.completed
+      : Boolean(solvedAt || raw.solved_at)
+
+  return {
+    completed,
+    timeSeconds,
+    hintsUsed: hintsLegacy,
+    wasRevealed,
+    hintedCells,
+    solvedAt,
+  }
+}
+
+export function getTodaySolve(publishDate: string): SolveState | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(storageKey(publishDate))
     if (!raw) return null
-    return JSON.parse(raw) as TodaySolve
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return migrateLegacyJson(parsed)
   } catch {
     return null
   }
 }
 
-export function saveTodaySolve(solve: TodaySolve): void {
+export function saveTodaySolve(publishDate: string, state: SolveState): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(storageKey(solve.publish_date), JSON.stringify(solve))
+    window.localStorage.setItem(storageKey(publishDate), JSON.stringify(state))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function addHintedCell(publishDate: string, key: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const cur = getTodaySolve(publishDate)
+    const hintedCells = cur?.hintedCells ? [...cur.hintedCells] : []
+    if (!hintedCells.includes(key)) hintedCells.push(key)
+    const next: SolveState = cur
+      ? { ...cur, hintedCells }
+      : {
+          completed: false,
+          timeSeconds: 0,
+          hintsUsed: 0,
+          wasRevealed: false,
+          hintedCells,
+          solvedAt: '',
+        }
+    saveTodaySolve(publishDate, next)
   } catch {
     /* ignore */
   }
@@ -45,18 +103,19 @@ function previewKey(puzzleId: string): string {
   return `sportsmini:preview:${puzzleId}`
 }
 
-export function getPreviewSolve(puzzleId: string): TodaySolve | null {
+export function getPreviewSolve(puzzleId: string): SolveState | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(previewKey(puzzleId))
     if (!raw) return null
-    return JSON.parse(raw) as TodaySolve
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return migrateLegacyJson(parsed)
   } catch {
     return null
   }
 }
 
-export function savePreviewSolve(puzzleId: string, solve: TodaySolve): void {
+export function savePreviewSolve(puzzleId: string, solve: SolveState): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(previewKey(puzzleId), JSON.stringify(solve))

@@ -36,7 +36,7 @@ export function PuzzlePreviewPageClient({
 
   useEffect(() => {
     const s = getPreviewSolve(puzzle.puzzle_id)
-    if (s?.solved_at && typeof s.time_seconds === 'number') setCompletedSec(s.time_seconds)
+    if (s?.solvedAt && typeof s.timeSeconds === 'number') setCompletedSec(s.timeSeconds)
   }, [puzzle.puzzle_id])
 
   const onPreviewSolveComplete = useCallback((sec: number) => {

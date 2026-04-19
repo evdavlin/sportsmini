@@ -50,11 +50,11 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
   const previewGrid = useMemo(() => buildHomePreviewGrid(puzzle), [puzzle])
 
   useEffect(() => {
-    setStreak(getMockStats(getTodaySolve(puzzle.publish_date)).streak)
+    setStreak(getMockStats(getTodaySolve(puzzle.publish_date), puzzle.publish_date).streak)
   }, [puzzle.publish_date])
 
   useEffect(() => {
-    if (getTodaySolve(puzzle.publish_date)) {
+    if (getTodaySolve(puzzle.publish_date)?.completed) {
       router.replace('/waiting')
     }
   }, [puzzle.publish_date, router])

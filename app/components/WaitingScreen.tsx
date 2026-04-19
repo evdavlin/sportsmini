@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import ShareSheet from '@/app/components/ShareSheet'
 import type { PuzzlePayload } from '@/lib/puzzles'
-import type { TodaySolve } from '@/lib/progress'
+import type { SolveState } from '@/lib/progress'
 import { getTodaySolve } from '@/lib/progress'
 import { getMockStats } from '@/lib/mock-stats'
 import {
@@ -18,8 +19,6 @@ import {
   type GridData,
 } from './theme'
 
-const SHARE_URL = 'sportsmini.vercel.app'
-
 function buildNumberMap(puzzle: PuzzlePayload): Map<string, number> {
   const map = new Map<string, number>()
   for (const clue of [...puzzle.across, ...puzzle.down]) {
@@ -29,13 +28,14 @@ function buildNumberMap(puzzle: PuzzlePayload): Map<string, number> {
   return map
 }
 
-function buildCompletedGrid(puzzle: PuzzlePayload, entered: Record<string, string>): GridData {
+/** Completed puzzle — letters from solution grid */
+function buildSolvedGridDisplay(puzzle: PuzzlePayload): GridData {
   const nm = buildNumberMap(puzzle)
   return puzzle.grid.map((row, r) =>
     row.map((cell, c) => {
       if (cell === '#') return null
       const k = `${r},${c}`
-      const letter = entered[k] ?? cell
+      const letter = typeof cell === 'string' ? cell : ''
       const num = nm.get(k)
       return {
         letter,
@@ -77,16 +77,17 @@ function nextPuzzleSubtitle(next: Date): string {
 
 export default function WaitingScreen({ puzzle }: { puzzle: PuzzlePayload }) {
   const router = useRouter()
-  const [solve, setSolve] = useState<TodaySolve | null>(null)
+  const [solveState, setSolveState] = useState<SolveState | null>(null)
   const [remainMs, setRemainMs] = useState(0)
+  const [shareOpen, setShareOpen] = useState(false)
 
   useEffect(() => {
     const s = getTodaySolve(puzzle.publish_date)
-    if (!s) {
+    if (!s?.completed) {
       router.replace('/')
       return
     }
-    setSolve(s)
+    setSolveState(s)
   }, [puzzle.publish_date, router])
 
   useEffect(() => {
@@ -99,48 +100,19 @@ export default function WaitingScreen({ puzzle }: { puzzle: PuzzlePayload }) {
     return () => window.clearInterval(id)
   }, [])
 
-  const stats = useMemo(() => (solve ? getMockStats(solve) : getMockStats(null)), [solve])
+  const stats = useMemo(
+    () => getMockStats(solveState, puzzle.publish_date),
+    [solveState, puzzle.publish_date]
+  )
 
-  const handleShare = async () => {
-    if (!solve) return
-    const pct = percentileRank(solve.time_seconds)
-    const puzzleNum = formatPuzzleNumberFromTitle(puzzle.title)
-    const timeStr = formatElapsedDisplay(solve.time_seconds)
-    const hintShare =
-      solve.hints_used >= 999
-        ? 'Reveal'
-        : solve.hints_used === 0
-          ? 'no hints'
-          : `${solve.hints_used} hint${solve.hints_used === 1 ? '' : 's'}`
-    const shareBody = [
-      `🏆 Sports Words ${puzzleNum}`,
-      `⏱ ${timeStr} · Top ${pct}%`,
-      `🔥 Day ${stats.streak} · ${hintShare}`,
-      SHARE_URL,
-    ].join('\n')
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: shareBody })
-        return
-      }
-    } catch {
-      /* fall through */
-    }
-    try {
-      await navigator.clipboard.writeText(shareBody)
-    } catch {
-      /* ignore */
-    }
-  }
-
-  if (!solve) {
+  if (!solveState) {
     return null
   }
 
-  const pct = percentileRank(solve.time_seconds)
-  const gridData = buildCompletedGrid(puzzle, solve.entered)
+  const pct = percentileRank(solveState.timeSeconds)
+  const gridData = buildSolvedGridDisplay(puzzle)
   const puzzleNum = formatPuzzleNumberFromTitle(puzzle.title)
-  const timeStr = formatElapsedDisplay(solve.time_seconds)
+  const timeStr = formatElapsedDisplay(solveState.timeSeconds)
 
   return (
     <div style={{ minHeight: '100vh', background: theme.bg, fontFamily: 'system-ui, sans-serif' }}>
@@ -221,47 +193,52 @@ export default function WaitingScreen({ puzzle }: { puzzle: PuzzlePayload }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleShare}
-            style={{
-              width: '100%',
-              background: 'transparent',
-              color: theme.text,
-              border: `1px solid ${theme.text}`,
-              padding: '14px',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: 2,
-              borderRadius: 4,
-              cursor: 'pointer',
-              marginBottom: 8,
-              fontFamily: 'system-ui, sans-serif',
-            }}
-          >
-            SHARE RESULT
-          </button>
-
-          <Link
-            href="/stats"
-            style={{
-              display: 'block',
-              width: '100%',
-              background: 'transparent',
-              color: theme.textMuted,
-              border: 'none',
-              padding: '10px',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-              textDecoration: 'none',
-              textAlign: 'center',
-            }}
-          >
-            View full stats →
-          </Link>
+          {solveState.completed ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  color: theme.text,
+                  border: `1px solid ${theme.text}`,
+                  padding: '14px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  marginBottom: 10,
+                  fontFamily: 'system-ui, sans-serif',
+                }}
+              >
+                SHARE RESULT
+              </button>
+              <Link
+                href="/stats"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  background: 'transparent',
+                  color: theme.textMuted,
+                  border: 'none',
+                  padding: '10px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                }}
+              >
+                View full stats →
+              </Link>
+            </>
+          ) : null}
         </div>
       </div>
+
+      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} puzzle={puzzle} solveState={solveState} />
     </div>
   )
 }
