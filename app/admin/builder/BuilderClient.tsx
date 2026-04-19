@@ -363,6 +363,7 @@ export default function BuilderClient({
 
   function handleRootKeyDown(e: React.KeyboardEvent) {
     const target = e.target as HTMLElement
+    if (target.closest('[data-word-explorer]')) return
     if (
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
@@ -459,6 +460,9 @@ export default function BuilderClient({
           activeCell={activeCell}
           direction={direction}
           onCellClick={handleCellClick}
+          glossary={initialGlossary}
+          activeSlot={activeSlot}
+          onPlaceWord={handlePlaceWord}
         />
         <RightPane
           activeSlot={activeSlot}
@@ -719,6 +723,309 @@ function BuilderTopBar({
   )
 }
 
+function WordExplorer({
+  glossary,
+  activeSlot,
+  onPlaceWord,
+}: {
+  glossary: GlossaryEntry[]
+  activeSlot: Slot | null
+  onPlaceWord: (e: GlossaryEntry) => void
+}) {
+  const [length, setLength] = useState(5)
+  const [pattern, setPattern] = useState<string[]>(() =>
+    Array.from({ length: 5 }, () => '')
+  )
+  const [placeError, setPlaceError] = useState<string | null>(null)
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    setPattern((prev) => {
+      const next = prev.slice(0, length)
+      while (next.length < length) next.push('')
+      return next
+    })
+  }, [length])
+
+  useEffect(() => {
+    setPlaceError(null)
+  }, [pattern, length, activeSlot])
+
+  const filtered = useMemo(() => {
+    return glossary.filter((entry) => {
+      if (entry.word.length !== length) return false
+      const w = entry.word.toUpperCase()
+      for (let i = 0; i < length; i++) {
+        const p = pattern[i]
+        if (p && w[i] !== p.toUpperCase()) return false
+      }
+      return true
+    })
+  }, [glossary, length, pattern])
+
+  const shown = filtered.slice(0, 40)
+  const total = filtered.length
+
+  const bumpLength = (delta: number) => {
+    setLength((n) => Math.min(10, Math.max(2, n + delta)))
+  }
+
+  const focusAt = (idx: number) => {
+    window.requestAnimationFrame(() => {
+      inputRefs.current[idx]?.focus()
+      inputRefs.current[idx]?.select()
+    })
+  }
+
+  function tryPlace(entry: GlossaryEntry) {
+    if (!activeSlot || activeSlot.number === null) {
+      setPlaceError('Select a cell on the grid to choose an active slot.')
+      return
+    }
+    if (entry.word.length !== activeSlot.length) {
+      setPlaceError(`Doesn't fit active slot (needs ${activeSlot.length} letters)`)
+      return
+    }
+    setPlaceError(null)
+    onPlaceWord(entry)
+  }
+
+  const BLOCK = 36
+
+  return (
+    <div data-word-explorer style={{ width: '100%' }}>
+      <div
+        style={{
+          paddingTop: 20,
+          marginTop: 12,
+          borderTop: `1px solid ${t.borderSoft}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginBottom: 14,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: t.textMuted,
+              textTransform: 'uppercase',
+            }}
+          >
+            Word Explorer
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: t.textMuted }}>Length:</span>
+            <button
+              type="button"
+              aria-label="Decrease length"
+              data-word-explorer
+              onClick={() => bumpLength(-1)}
+              style={{
+                width: 28,
+                height: 28,
+                padding: 0,
+                border: `1px solid ${t.border}`,
+                borderRadius: 3,
+                background: t.surfaceAlt,
+                cursor: 'pointer',
+                fontSize: 16,
+                lineHeight: 1,
+                color: t.text,
+              }}
+            >
+              −
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 700, minWidth: 18, textAlign: 'center' }}>
+              {length}
+            </span>
+            <button
+              type="button"
+              aria-label="Increase length"
+              data-word-explorer
+              onClick={() => bumpLength(1)}
+              style={{
+                width: 28,
+                height: 28,
+                padding: 0,
+                border: `1px solid ${t.border}`,
+                borderRadius: 3,
+                background: t.surfaceAlt,
+                cursor: 'pointer',
+                fontSize: 16,
+                lineHeight: 1,
+                color: t.text,
+              }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            marginBottom: 12,
+          }}
+        >
+          {Array.from({ length }, (_, i) => (
+            <input
+              key={i}
+              ref={(el) => {
+                inputRefs.current[i] = el
+              }}
+              type="text"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-label={`Pattern letter ${i + 1}`}
+              value={pattern[i] ?? ''}
+              maxLength={1}
+              data-word-explorer
+              onChange={(e) => {
+                const raw = e.target.value
+                if (raw === '') {
+                  setPattern((prev) => {
+                    const next = [...prev]
+                    next[i] = ''
+                    return next
+                  })
+                  return
+                }
+                const letters = raw.replace(/[^a-zA-Z]/g, '')
+                const ch = letters.slice(-1).toUpperCase()
+                if (!/^[A-Z]$/.test(ch)) return
+                setPattern((prev) => {
+                  const next = [...prev]
+                  next[i] = ch
+                  return next
+                })
+                if (i < length - 1) focusAt(i + 1)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab') {
+                  e.preventDefault()
+                  const next = e.shiftKey ? i - 1 : i + 1
+                  if (next >= 0 && next < length) focusAt(next)
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                  return
+                }
+                if (e.key === 'Backspace') {
+                  if (pattern[i]) {
+                    e.preventDefault()
+                    setPattern((prev) => {
+                      const next = [...prev]
+                      next[i] = ''
+                      return next
+                    })
+                  } else if (i > 0) {
+                    e.preventDefault()
+                    focusAt(i - 1)
+                    setPattern((prev) => {
+                      const next = [...prev]
+                      next[i - 1] = ''
+                      return next
+                    })
+                  }
+                }
+              }}
+              onClick={() => {
+                inputRefs.current[i]?.select()
+              }}
+              style={{
+                width: BLOCK,
+                height: BLOCK,
+                boxSizing: 'border-box',
+                padding: 0,
+                textAlign: 'center',
+                fontSize: 16,
+                fontWeight: 700,
+                borderRadius: 3,
+                border: `1px solid ${pattern[i] ? t.hero : t.borderSoft}`,
+                background: pattern[i] ? t.heroTint : t.surfaceAlt,
+                color: pattern[i] ? t.hero : t.textSoft,
+                fontFamily: 'inherit',
+                outline: 'none',
+                caretColor: pattern[i] ? t.hero : t.textSoft,
+              }}
+              placeholder="·"
+            />
+          ))}
+        </div>
+
+        {placeError ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: t.error,
+              marginBottom: 10,
+              lineHeight: 1.35,
+            }}
+          >
+            {placeError}
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            fontSize: 11,
+            color: t.textMuted,
+            fontWeight: 600,
+            marginBottom: 8,
+          }}
+        >
+          {total} matches · showing first {Math.min(40, Math.max(0, total))}
+        </div>
+
+        <div
+          style={{
+            borderTop: `1px solid ${t.borderSoft}`,
+            maxHeight: 280,
+            overflowY: 'auto',
+          }}
+        >
+          {shown.length === 0 ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>
+              No matches for this pattern.
+            </div>
+          ) : (
+            shown.map((entry) => (
+              <GlossaryResult key={`explorer-${entry.id}`} entry={entry} onClick={() => tryPlace(entry)} />
+            ))
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: '8px 0 0',
+            fontSize: 10,
+            color: t.textMuted,
+            fontWeight: 600,
+          }}
+        >
+          Showing {Math.min(40, total)} of {total}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LeftPane({
   dims,
   setDims,
@@ -728,6 +1035,9 @@ function LeftPane({
   activeCell,
   direction,
   onCellClick,
+  glossary,
+  activeSlot,
+  onPlaceWord,
 }: {
   dims: { rows: number; cols: number }
   setDims: (d: { rows: number; cols: number }) => void
@@ -737,6 +1047,9 @@ function LeftPane({
   activeCell: [number, number] | null
   direction: Direction
   onCellClick: (r: number, c: number) => void
+  glossary: GlossaryEntry[]
+  activeSlot: Slot | null
+  onPlaceWord: (e: GlossaryEntry) => void
 }) {
   const numbering = useMemo(() => computeNumbering(grid), [grid])
 
@@ -776,20 +1089,25 @@ function LeftPane({
           background: t.surface,
           border: `1px solid ${t.border}`,
           borderRadius: 6,
-          padding: 20,
+          padding: '20px 20px 18px',
           display: 'flex',
-          justifyContent: 'center',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          gap: 0,
         }}
       >
-        <GridView
-          grid={grid}
-          dims={dims}
-          numbering={numbering}
-          activeCell={activeCell}
-          activeWordCells={activeWordCells}
-          mode={mode}
-          onCellClick={onCellClick}
-        />
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <GridView
+            grid={grid}
+            dims={dims}
+            numbering={numbering}
+            activeCell={activeCell}
+            activeWordCells={activeWordCells}
+            mode={mode}
+            onCellClick={onCellClick}
+          />
+        </div>
+        <WordExplorer glossary={glossary} activeSlot={activeSlot} onPlaceWord={onPlaceWord} />
       </div>
     </div>
   )
