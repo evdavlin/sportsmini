@@ -1,6 +1,6 @@
 import { supabaseService } from '@/lib/supabase-service'
-import type { PuzzlePayload } from '@/lib/puzzles'
-import { buildPayloadFromDb, getCurrentPuzzleDate } from '@/lib/puzzles'
+import type { PuzzleClueRowPayload, PuzzlePayload, PuzzleRowPayload } from '@/lib/puzzles'
+import { buildPuzzlePayload, getCurrentPuzzleDate } from '@/lib/puzzles'
 
 export type AdminPuzzle = {
   id: string
@@ -210,17 +210,5 @@ export async function getPuzzlePayloadForAdmin(puzzleId: string): Promise<Puzzle
 
   if (!clues) return null
 
-  type DbClue = {
-    number: number
-    row: number
-    col: number
-    direction: string
-    word: string
-    clue_text: string
-  }
-
-  return buildPayloadFromDb(
-    puzzle as Parameters<typeof buildPayloadFromDb>[0],
-    clues as DbClue[]
-  )
+  return buildPuzzlePayload(puzzle as PuzzleRowPayload, clues as PuzzleClueRowPayload[])
 }

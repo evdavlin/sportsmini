@@ -58,6 +58,10 @@ type SolveScreenProps = {
   previewMode?: boolean
   previewTitle?: string | null
   previewStatus?: string | null
+  /** Hide built-in preview chrome when the route renders an external sticky banner */
+  suppressPreviewBanner?: boolean
+  /** Fires once when preview solve completes (previewMode only) */
+  onPreviewSolveComplete?: (elapsedSeconds: number) => void
 }
 
 export default function SolveScreen({
@@ -65,6 +69,8 @@ export default function SolveScreen({
   previewMode = false,
   previewTitle,
   previewStatus,
+  suppressPreviewBanner = false,
+  onPreviewSolveComplete,
 }: SolveScreenProps) {
   const router = useRouter()
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null)
@@ -257,6 +263,7 @@ export default function SolveScreen({
         solved_at: new Date().toISOString(),
       })
       setPreviewDoneSeconds(elapsedSeconds)
+      onPreviewSolveComplete?.(elapsedSeconds)
       return
     }
 
@@ -282,7 +289,15 @@ export default function SolveScreen({
       .eq('device_id', did)
 
     router.push('/win')
-  }, [isSolved, elapsedSeconds, puzzle.puzzle_id, puzzle.publish_date, router, previewMode])
+  }, [
+    isSolved,
+    elapsedSeconds,
+    puzzle.puzzle_id,
+    puzzle.publish_date,
+    router,
+    previewMode,
+    onPreviewSolveComplete,
+  ])
 
   const touchStart = () => {
     setStartTime((st) => {
@@ -644,7 +659,7 @@ export default function SolveScreen({
         paddingBottom: 24,
       }}
     >
-      {previewMode ? (
+      {previewMode && !suppressPreviewBanner ? (
         <div
           style={{
             padding: '12px 16px',

@@ -19,6 +19,15 @@ export const theme = {
   keyBg: '#E9E4DB',
   keyText: '#2B2B2B',
   gold: '#D9C36A',
+  /** Admin preview — status badge (puzzle row state) */
+  statusDraftBg: '#E5E0D5',
+  statusDraft: '#8B8680',
+  statusQueuedBg: '#DDE5EC',
+  statusQueued: '#3D5F7A',
+  statusLiveBg: '#DCE7E0',
+  statusLive: '#5E8A6E',
+  statusArchivedBg: '#EEEAE0',
+  statusArchived: '#A09B91',
 } as const
 
 export function MenuIcon({ color = theme.text }: { color?: string }) {

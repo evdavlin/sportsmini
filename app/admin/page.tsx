@@ -145,13 +145,18 @@ export default async function AdminDashboardPage() {
           </div>
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Today&apos;s puzzle</div>
           {live && livePattern?.length ? (
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <MiniGrid pattern={livePattern} />
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>{String(live.title ?? '')}</div>
-                <div style={{ fontSize: 13, color: s.textMuted }}>
+                <div style={{ fontSize: 13, color: s.textMuted, marginBottom: 8 }}>
                   {fmtDate(live.publish_date as string)} · Difficulty {String(live.difficulty ?? '—')}
                 </div>
+                {'id' in live && live.id ? (
+                  <Link href={`/admin/puzzles/${String(live.id)}`} style={{ color: s.hero, fontWeight: 600, fontSize: 13 }}>
+                    Preview →
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : (

@@ -20,23 +20,25 @@ export type PuzzlePayload = {
   down: PuzzleClue[]
 }
 
-type DbClue = {
+/** Row shape from `puzzles` for `buildPuzzlePayload` */
+export type PuzzleRowPayload = {
+  id: string
+  title: string | null
+  publish_date: string | null
+  width: number
+  height: number
+  difficulty: number | null
+  grid: unknown
+}
+
+/** Row shape from `puzzle_clues` for `buildPuzzlePayload` */
+export type PuzzleClueRowPayload = {
   number: number
   row: number
   col: number
   direction: string
   word: string
   clue_text: string
-}
-
-type DbPuzzle = {
-  id: string
-  title: string | null
-  publish_date: string
-  width: number
-  height: number
-  difficulty: number | null
-  grid: unknown
 }
 
 export function getCurrentPuzzleDate(now: Date = new Date()): string {
@@ -58,15 +60,18 @@ export function getCurrentPuzzleDate(now: Date = new Date()): string {
   return target.toISOString().slice(0, 10)
 }
 
-export function buildPayloadFromDb(puzzle: DbPuzzle, clues: DbClue[]): PuzzlePayload | null {
-  const pattern = (puzzle.grid as { pattern: string[] }).pattern
+export function buildPuzzlePayload(
+  puzzleRow: PuzzleRowPayload,
+  clueRows: PuzzleClueRowPayload[]
+): PuzzlePayload | null {
+  const pattern = (puzzleRow.grid as { pattern: string[] }).pattern
   if (!pattern?.length) return null
 
   const grid: string[][] = pattern.map((row) =>
     row.split('').map((cell) => (cell === '#' ? '#' : ''))
   )
 
-  for (const clue of clues) {
+  for (const clue of clueRows) {
     const letters = clue.word.split('')
     for (let i = 0; i < letters.length; i++) {
       const r = clue.direction === 'across' ? clue.row : clue.row + i
@@ -75,7 +80,7 @@ export function buildPayloadFromDb(puzzle: DbPuzzle, clues: DbClue[]): PuzzlePay
     }
   }
 
-  const across = clues
+  const across = clueRows
     .filter((c) => c.direction === 'across')
     .map((c) => ({
       num: c.number,
@@ -85,7 +90,7 @@ export function buildPayloadFromDb(puzzle: DbPuzzle, clues: DbClue[]): PuzzlePay
       clue: c.clue_text,
     }))
 
-  const down = clues
+  const down = clueRows
     .filter((c) => c.direction === 'down')
     .map((c) => ({
       num: c.number,
@@ -96,12 +101,12 @@ export function buildPayloadFromDb(puzzle: DbPuzzle, clues: DbClue[]): PuzzlePay
     }))
 
   return {
-    puzzle_id: puzzle.id,
-    title: puzzle.title,
-    publish_date: puzzle.publish_date,
-    width: puzzle.width,
-    height: puzzle.height,
-    difficulty: puzzle.difficulty,
+    puzzle_id: puzzleRow.id,
+    title: puzzleRow.title,
+    publish_date: puzzleRow.publish_date ?? '',
+    width: puzzleRow.width,
+    height: puzzleRow.height,
+    difficulty: puzzleRow.difficulty,
     grid,
     across,
     down,
@@ -131,7 +136,7 @@ export async function getTodaysPuzzle(): Promise<PuzzlePayload | null> {
 
   if (cluesError || !clues) return null
 
-  return buildPayloadFromDb(puzzle as DbPuzzle, clues as DbClue[])
+  return buildPuzzlePayload(puzzle as PuzzleRowPayload, clues as PuzzleClueRowPayload[])
 }
 
 /**
@@ -154,5 +159,5 @@ export async function getPuzzlePayloadById(puzzleId: string): Promise<PuzzlePayl
 
   if (cluesError || !clues) return null
 
-  return buildPayloadFromDb(puzzle as DbPuzzle, clues as DbClue[])
+  return buildPuzzlePayload(puzzle as PuzzleRowPayload, clues as PuzzleClueRowPayload[])
 }
