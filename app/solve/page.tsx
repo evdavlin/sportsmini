@@ -1,6 +1,8 @@
 import SolveScreen from '@/app/components/SolveScreen'
 import { getTodaysPuzzle } from '@/lib/puzzles'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SolvePage() {
   const puzzle = await getTodaysPuzzle()
 

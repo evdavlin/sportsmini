@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getHistoryRows } from '@/lib/admin'
 
+export const dynamic = 'force-dynamic'
+
 const s = {
   text: '#2B2B2B',
   textMuted: '#7A7A7A',

@@ -1,11 +1,8 @@
-/** Puzzle #1 launches 2026-04-18 (UTC calendar days). */
-const LAUNCH_UTC_MS = Date.UTC(2026, 3, 18)
-
 export function getPuzzleNumber(publishDate: string): number {
-  const [y, mo, d] = publishDate.split('-').map(Number)
-  const dayUtc = Date.UTC(y, mo - 1, d)
-  const diffDays = Math.floor((dayUtc - LAUNCH_UTC_MS) / 86400000)
-  return diffDays + 1
+  const launch = new Date('2026-04-18T00:00:00Z').getTime()
+  const target = new Date(publishDate + 'T00:00:00Z').getTime()
+  const daysSince = Math.round((target - launch) / (1000 * 60 * 60 * 24))
+  return daysSince + 1
 }
 
 export function formatPuzzleNumber(n: number): string {

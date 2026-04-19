@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { getAdminPuzzles, projectedPublishDate } from '@/lib/admin'
 import { queueMoveDown, queueMoveUp, queueRemoveAction } from '@/app/admin/actions'
 
+export const dynamic = 'force-dynamic'
+
 const s = {
   surface: '#FBFAF6',
   text: '#2B2B2B',

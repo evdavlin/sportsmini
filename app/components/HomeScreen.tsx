@@ -6,11 +6,11 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PuzzlePayload } from '@/lib/puzzles'
 import { getTodaySolve } from '@/lib/progress'
 import { getMockStats } from '@/lib/mock-stats'
+import { formatPuzzleNumber, getPuzzleNumber } from '@/lib/share'
 import {
   AppHeader,
   GridDisplay,
   formatMetaDateLine,
-  formatPuzzleNumberFromTitle,
   theme,
   type GridData,
 } from './theme'
@@ -59,7 +59,7 @@ export default function HomeScreen({ puzzle }: { puzzle: PuzzlePayload }) {
     }
   }, [puzzle.publish_date, router])
 
-  const dateLine = `${formatMetaDateLine(puzzle.publish_date)} · ${formatPuzzleNumberFromTitle(puzzle.title)}`
+  const dateLine = `${formatMetaDateLine(puzzle.publish_date)} · ${formatPuzzleNumber(getPuzzleNumber(puzzle.publish_date))}`
 
   return (
     <div style={{ minHeight: '100vh', background: theme.bg, fontFamily: 'system-ui, sans-serif' }}>

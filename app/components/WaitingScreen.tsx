@@ -8,12 +8,12 @@ import type { PuzzlePayload } from '@/lib/puzzles'
 import type { SolveState } from '@/lib/progress'
 import { getTodaySolve } from '@/lib/progress'
 import { getMockStats } from '@/lib/mock-stats'
+import { formatPuzzleNumber, getPuzzleNumber } from '@/lib/share'
 import {
   AppHeader,
   CheckIcon,
   GridDisplay,
   formatElapsedDisplay,
-  formatPuzzleNumberFromTitle,
   getNextLocal7am,
   theme,
   type GridData,
@@ -111,7 +111,7 @@ export default function WaitingScreen({ puzzle }: { puzzle: PuzzlePayload }) {
 
   const pct = percentileRank(solveState.timeSeconds)
   const gridData = buildSolvedGridDisplay(puzzle)
-  const puzzleNum = formatPuzzleNumberFromTitle(puzzle.title)
+  const puzzleNum = formatPuzzleNumber(getPuzzleNumber(puzzle.publish_date))
   const timeStr = formatElapsedDisplay(solveState.timeSeconds)
 
   return (

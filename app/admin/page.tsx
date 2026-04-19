@@ -6,6 +6,8 @@ import {
   type AdminPuzzle,
 } from '@/lib/admin'
 
+export const dynamic = 'force-dynamic'
+
 const s = {
   surface: '#FBFAF6',
   text: '#2B2B2B',

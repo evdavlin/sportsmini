@@ -1,6 +1,8 @@
 import WaitingScreen from '@/app/components/WaitingScreen'
 import { getTodaysPuzzle } from '@/lib/puzzles'
 
+export const dynamic = 'force-dynamic'
+
 export default async function WaitingPage() {
   const puzzle = await getTodaysPuzzle()
 

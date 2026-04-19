@@ -3,6 +3,8 @@ import { getAdminPuzzles } from '@/lib/admin'
 import { queueAddAction } from '@/app/admin/actions'
 import { DeleteDraftButton } from '@/app/admin/drafts/DeleteDraftButton'
 
+export const dynamic = 'force-dynamic'
+
 const s = {
   surface: '#FBFAF6',
   text: '#2B2B2B',

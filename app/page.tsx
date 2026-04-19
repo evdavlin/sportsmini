@@ -1,6 +1,8 @@
 import HomeScreen from '@/app/components/HomeScreen'
 import { getTodaysPuzzle } from '@/lib/puzzles'
 
+export const dynamic = 'force-dynamic'
+
 export default async function Home() {
   const puzzle = await getTodaysPuzzle()
 

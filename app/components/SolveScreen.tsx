@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { PuzzleClue, PuzzlePayload } from '@/lib/puzzles'
+import { formatPuzzleNumber, getPuzzleNumber } from '@/lib/share'
 import { supabase } from '@/lib/supabase'
 import { getDeviceId, touchDevice } from '@/lib/device'
 import {
@@ -20,13 +21,12 @@ import {
   GridDisplay,
   formatElapsed,
   formatPublishDateCompact,
-  formatPuzzleNumberFromTitle,
   theme,
   type GridData,
 } from './theme'
 
 function formatPuzzleMeta(puzzle: PuzzlePayload): string {
-  return `${formatPuzzleNumberFromTitle(puzzle.title)} · ${formatPublishDateCompact(puzzle.publish_date)}`
+  return `${formatPuzzleNumber(getPuzzleNumber(puzzle.publish_date))} · ${formatPublishDateCompact(puzzle.publish_date)}`
 }
 
 function buildNumberMap(puzzle: PuzzlePayload): Map<string, number> {
@@ -79,14 +79,17 @@ export default function SolveScreen({
   const [entered, setEntered] = useState<Record<string, string>>({})
   const [wrongCells, setWrongCells] = useState<Set<string>>(() => new Set())
   const [status, setStatus] = useState<
-    null | 'all-correct' | 'some-wrong' | 'revealed' | 'solved'
+    null | 'partial-correct' | 'some-wrong' | 'revealed' | 'solved'
   >(null)
+  const [partialUnfilled, setPartialUnfilled] = useState<number | null>(null)
+  const [deviceError, setDeviceError] = useState<string | null>(null)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [streak, setStreak] = useState(0)
   const [previewDoneSeconds, setPreviewDoneSeconds] = useState<number | null>(null)
 
   const sessionStartedRef = useRef(false)
+  const sessionStartingRef = useRef(false)
   const deviceIdRef = useRef<string | null>(null)
   const previewModeRef = useRef(previewMode)
   const maybeStartSessionRef = useRef<(() => Promise<void>) | null>(null)
@@ -107,6 +110,11 @@ export default function SolveScreen({
   const completionRef = useRef(false)
   const hintsUsedRef = useRef(0)
   const hintedCellsRef = useRef<string[]>([])
+  const elapsedSecondsRef = useRef(0)
+
+  useEffect(() => {
+    elapsedSecondsRef.current = elapsedSeconds
+  }, [elapsedSeconds])
 
   useEffect(() => {
     if (!previewMode) {
@@ -122,22 +130,133 @@ export default function SolveScreen({
   }, [puzzle.publish_date, router, previewMode])
 
   const maybeStartSession = useCallback(async () => {
-    if (previewMode || sessionStartedRef.current) return
-    sessionStartedRef.current = true
-    const deviceId = getDeviceId()
-    deviceIdRef.current = deviceId
-    touchDevice(deviceId)
-    await supabase.from('solves').upsert(
-      {
-        puzzle_id: puzzle.puzzle_id,
-        device_id: deviceId,
-        started_at: new Date().toISOString(),
-      },
-      { onConflict: 'puzzle_id,device_id', ignoreDuplicates: true }
-    )
+    if (previewMode || sessionStartedRef.current || sessionStartingRef.current) return
+    sessionStartingRef.current = true
+    try {
+      const res = await getDeviceId()
+      if (!res.ok) {
+        setDeviceError('Could not register this device. Solve tracking may not save.')
+        console.error('[solve] device ensure failed', res.error)
+        sessionStartedRef.current = true
+        return
+      }
+      deviceIdRef.current = res.deviceId
+      await touchDevice(res.deviceId)
+      try {
+        const { error } = await supabase.from('solves').upsert(
+          {
+            puzzle_id: puzzle.puzzle_id,
+            device_id: res.deviceId,
+            started_at: new Date().toISOString(),
+          },
+          { onConflict: 'puzzle_id,device_id', ignoreDuplicates: true }
+        )
+        if (error) {
+          console.error('[solve] solves upsert on session start', {
+            puzzle_id: puzzle.puzzle_id,
+            device_id: res.deviceId,
+            error,
+          })
+        }
+      } catch (e) {
+        console.error('[solve] solves upsert exception on session start', e)
+      }
+      sessionStartedRef.current = true
+    } finally {
+      sessionStartingRef.current = false
+    }
   }, [previewMode, puzzle.puzzle_id])
 
   maybeStartSessionRef.current = maybeStartSession
+
+  const finalizeWin = useCallback(async () => {
+    if (completionRef.current) return
+    completionRef.current = true
+    const st = stateRef.current.status
+    const secs = elapsedSecondsRef.current
+
+    if (previewModeRef.current) {
+      savePreviewSolve(puzzle.puzzle_id, {
+        completed: true,
+        timeSeconds: secs,
+        hintsUsed: hintsUsedRef.current,
+        wasRevealed: st === 'revealed',
+        hintedCells: [...hintedCellsRef.current],
+        solvedAt: new Date().toISOString(),
+      })
+      setPreviewDoneSeconds(secs)
+      onPreviewSolveComplete?.(secs)
+      return
+    }
+
+    saveTodaySolve(puzzle.publish_date, {
+      completed: true,
+      timeSeconds: secs,
+      hintsUsed: hintsUsedRef.current,
+      wasRevealed: st === 'revealed',
+      hintedCells: [...hintedCellsRef.current],
+      solvedAt: new Date().toISOString(),
+    })
+
+    let did = deviceIdRef.current
+    if (!did) {
+      const res = await getDeviceId()
+      if (res.ok) {
+        did = res.deviceId
+        deviceIdRef.current = did
+      }
+    }
+
+    if (did) {
+      try {
+        const up = await supabase
+          .from('solves')
+          .update({
+            solved_at: new Date().toISOString(),
+            time_seconds: secs,
+            hints_used: hintsUsedRef.current,
+            was_revealed: st === 'revealed',
+          })
+          .eq('puzzle_id', puzzle.puzzle_id)
+          .eq('device_id', did)
+          .select('puzzle_id')
+
+        if (up.error) throw up.error
+        const rows = up.data?.length ?? 0
+        if (rows === 0) {
+          const ins = await supabase.from('solves').upsert(
+            {
+              puzzle_id: puzzle.puzzle_id,
+              device_id: did,
+              started_at: new Date().toISOString(),
+              solved_at: new Date().toISOString(),
+              time_seconds: secs,
+              hints_used: hintsUsedRef.current,
+              was_revealed: st === 'revealed',
+            },
+            { onConflict: 'puzzle_id,device_id' }
+          )
+          if (ins.error) {
+            console.error('[solve] solves completion insert fallback', {
+              puzzle_id: puzzle.puzzle_id,
+              device_id: did,
+              error: ins.error,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('[solve] solves completion update failed', {
+          puzzle_id: puzzle.puzzle_id,
+          device_id: did,
+          error: e,
+        })
+      }
+    } else {
+      console.error('[solve] completion skipped — no device id', { puzzle_id: puzzle.puzzle_id })
+    }
+
+    if (!previewModeRef.current) router.push('/win')
+  }, [onPreviewSolveComplete, puzzle.publish_date, puzzle.puzzle_id, router])
 
   const cellToClueMap = useMemo(() => {
     const map = new Map<string, { across?: PuzzleClue; down?: PuzzleClue }>()
@@ -251,55 +370,19 @@ export default function SolveScreen({
   }, [isSolved, status])
 
   useEffect(() => {
-    if (!isSolved || completionRef.current) return
-    completionRef.current = true
-    const st = stateRef.current.status
-
-    if (previewMode) {
-      savePreviewSolve(puzzle.puzzle_id, {
-        completed: true,
-        timeSeconds: elapsedSeconds,
-        hintsUsed: hintsUsedRef.current,
-        wasRevealed: st === 'revealed',
-        hintedCells: [...hintedCellsRef.current],
-        solvedAt: new Date().toISOString(),
-      })
-      setPreviewDoneSeconds(elapsedSeconds)
-      onPreviewSolveComplete?.(elapsedSeconds)
-      return
-    }
-
-    saveTodaySolve(puzzle.publish_date, {
-      completed: true,
-      timeSeconds: elapsedSeconds,
-      hintsUsed: hintsUsedRef.current,
-      wasRevealed: st === 'revealed',
-      hintedCells: [...hintedCellsRef.current],
-      solvedAt: new Date().toISOString(),
+    if (typeof window === 'undefined') return
+    console.log('[solve] isSolved / grid', {
+      isSolved,
+      allFilled,
+      enteredKeyCount: Object.keys(entered).length,
+      entered,
     })
+  }, [isSolved, allFilled, entered])
 
-    const did = deviceIdRef.current ?? getDeviceId()
-    void supabase
-      .from('solves')
-      .update({
-        solved_at: new Date().toISOString(),
-        time_seconds: elapsedSeconds,
-        hints_used: hintsUsedRef.current,
-        was_revealed: st === 'revealed',
-      })
-      .eq('puzzle_id', puzzle.puzzle_id)
-      .eq('device_id', did)
-
-    router.push('/win')
-  }, [
-    isSolved,
-    elapsedSeconds,
-    puzzle.puzzle_id,
-    puzzle.publish_date,
-    router,
-    previewMode,
-    onPreviewSolveComplete,
-  ])
+  useEffect(() => {
+    if (!isSolved) return
+    void finalizeWin()
+  }, [isSolved, finalizeWin])
 
   const touchStart = () => {
     setStartTime((st) => {
@@ -542,7 +625,10 @@ export default function SolveScreen({
     setPreviewDoneSeconds(null)
     completionRef.current = false
     sessionStartedRef.current = false
+    sessionStartingRef.current = false
     deviceIdRef.current = null
+    setDeviceError(null)
+    setPartialUnfilled(null)
     hintsUsedRef.current = 0
     hintedCellsRef.current = []
     setStartTime(null)
@@ -560,9 +646,31 @@ export default function SolveScreen({
     }
     setWrongCells(nextWrong)
 
-    if (isSolved) setStatus('solved')
-    else if (nextWrong.size > 0) setStatus('some-wrong')
-    else setStatus('all-correct')
+    let unfilled = 0
+    for (let r = 0; r < puzzle.height; r++) {
+      for (let c = 0; c < puzzle.width; c++) {
+        if (puzzle.grid[r][c] === '#') continue
+        const k = cellKey(r, c)
+        if (!(entered[k] ?? '')) unfilled += 1
+      }
+    }
+
+    const wrongCount = nextWrong.size
+    const gridCompleteAndCorrect = unfilled === 0 && wrongCount === 0
+    setPartialUnfilled(null)
+
+    if (gridCompleteAndCorrect) {
+      setStatus('solved')
+      void finalizeWin()
+      return
+    }
+    if (wrongCount > 0) {
+      setPartialUnfilled(null)
+      setStatus('some-wrong')
+      return
+    }
+    setPartialUnfilled(unfilled)
+    setStatus('partial-correct')
   }
 
   const runHintCell = () => {
@@ -606,6 +714,7 @@ export default function SolveScreen({
     setEntered({})
     setWrongCells(new Set())
     setStatus(null)
+    setPartialUnfilled(null)
   }
 
   const handleKeyboardLetter = (ch: string) => {
@@ -667,8 +776,16 @@ export default function SolveScreen({
   }
 
   const statusLine = (() => {
-    if (status === 'all-correct')
-      return { text: 'ALL CORRECT', color: theme.success }
+    if (
+      status === 'partial-correct' &&
+      partialUnfilled != null &&
+      partialUnfilled > 0
+    ) {
+      return {
+        text: `Correct so far — ${partialUnfilled} ${partialUnfilled === 1 ? 'cell' : 'cells'} to go`,
+        color: theme.success,
+      }
+    }
     if (status === 'some-wrong')
       return { text: `${wrongCells.size} WRONG`, color: theme.error }
     if (status === 'revealed') return { text: 'REVEALED', color: theme.textMuted }
@@ -754,6 +871,23 @@ export default function SolveScreen({
           timer={formatElapsed(elapsedSeconds)}
           puzzleMeta={metaCenter}
         />
+
+        {deviceError && !previewMode ? (
+          <div
+            style={{
+              margin: '0 12px 8px',
+              padding: '10px 12px',
+              backgroundColor: theme.heroTint,
+              color: theme.text,
+              border: `1px solid ${theme.borderSoft}`,
+              borderRadius: 6,
+              fontSize: 12,
+              lineHeight: 1.35,
+            }}
+          >
+            {deviceError}
+          </div>
+        ) : null}
 
         <div style={{ padding: '6px 8px 6px' }}>
           <GridDisplay

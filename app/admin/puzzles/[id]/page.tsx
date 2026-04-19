@@ -4,6 +4,8 @@ import type { PuzzleClueRowPayload, PuzzleRowPayload } from '@/lib/puzzles'
 import { supabaseService } from '@/lib/supabase-service'
 import { PuzzlePreviewPageClient } from './PuzzlePreviewPageClient'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminPuzzlePreviewPage({
   params,
 }: {
