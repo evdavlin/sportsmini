@@ -169,7 +169,7 @@ export default function SolveScreen({
 
   const metaCenter = formatPuzzleMeta(puzzle)
 
-  const GRID_SIZE = 360
+  const GRID_SIZE = 304
 
   const numberMap = useMemo(() => buildNumberMap(puzzle), [puzzle])
 
