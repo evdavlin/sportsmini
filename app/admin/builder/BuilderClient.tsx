@@ -227,9 +227,7 @@ export default function BuilderClient({
         return false
 
       if (hasSearchQuery) {
-        return (
-          entry.word.toLowerCase().includes(q) || entry.clue.toLowerCase().includes(q)
-        )
+        return entry.word.toLowerCase().includes(q)
       }
 
       if (lengthFilter === 'auto' && !activeSlot) return false
