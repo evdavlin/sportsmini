@@ -209,26 +209,15 @@ export default function BuilderClient({
     return computeSlot(grid, activeCell, direction)
   }, [grid, activeCell, direction])
 
+  const trimmedSearch = search.trim()
+  const hasSearchQuery = trimmedSearch.length > 0
+  const searchLower = trimmedSearch.toLowerCase()
+
   const filteredResults = useMemo(() => {
     // TODO Sprint 5: use useDeferredValue or precomputed indexes if profiling shows jank
-    if (!activeSlot) return []
-    const targetLen =
-      lengthFilter === 'auto'
-        ? activeSlot.length
-        : lengthFilter === 'any'
-          ? null
-          : parseInt(lengthFilter, 10)
+    const q = searchLower
 
     return initialGlossary.filter((entry) => {
-      if (targetLen && entry.word.length !== targetLen) return false
-      if (!matchesPattern(entry.word, activeSlot.pattern)) return false
-      const q = search.trim().toLowerCase()
-      if (
-        q &&
-        !entry.word.toLowerCase().includes(q) &&
-        !entry.clue.toLowerCase().includes(q)
-      )
-        return false
       if (freshFilter === 'never' && entry.lastUsedAt !== null) return false
       if (
         freshFilter === '30d' &&
@@ -236,9 +225,35 @@ export default function BuilderClient({
         entry.daysSinceUse < 30
       )
         return false
+
+      if (hasSearchQuery) {
+        return (
+          entry.word.toLowerCase().includes(q) || entry.clue.toLowerCase().includes(q)
+        )
+      }
+
+      if (!activeSlot) return false
+
+      const targetLen =
+        lengthFilter === 'auto'
+          ? activeSlot.length
+          : lengthFilter === 'any'
+            ? null
+            : parseInt(lengthFilter, 10)
+
+      if (targetLen && entry.word.length !== targetLen) return false
+      if (!matchesPattern(entry.word, activeSlot.pattern)) return false
+
       return true
     })
-  }, [activeSlot, search, lengthFilter, freshFilter, initialGlossary])
+  }, [
+    activeSlot,
+    hasSearchQuery,
+    searchLower,
+    lengthFilter,
+    freshFilter,
+    initialGlossary,
+  ])
 
   const errorCount = validation.errors.length
 
@@ -440,6 +455,7 @@ export default function BuilderClient({
           setFreshFilter={setFreshFilter}
           results={filteredResults}
           onPlaceWord={handlePlaceWord}
+          freeFormSearch={hasSearchQuery}
         />
       </div>
 
@@ -972,6 +988,7 @@ function RightPane({
   setFreshFilter,
   results,
   onPlaceWord,
+  freeFormSearch,
 }: {
   activeSlot: Slot | null
   direction: Direction
@@ -983,6 +1000,7 @@ function RightPane({
   setFreshFilter: (v: string) => void
   results: GlossaryEntry[]
   onPlaceWord: (e: GlossaryEntry) => void
+  freeFormSearch: boolean
 }) {
   return (
     <div>
@@ -1033,6 +1051,11 @@ function RightPane({
               No cell selected
             </div>
           )}
+          {freeFormSearch ? (
+            <div style={{ fontSize: 11, color: t.textMuted, marginTop: 8, lineHeight: 1.35 }}>
+              Searching glossary — length and pattern filters off
+            </div>
+          ) : null}
         </div>
 
         {activeSlot ? (
@@ -1127,8 +1150,22 @@ function RightPane({
             ]}
           />
           <div style={{ flex: 1 }} />
-          <div style={{ fontSize: 11, color: t.textMuted, fontWeight: 600 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: t.textMuted,
+              fontWeight: 600,
+              textAlign: 'right',
+              lineHeight: 1.35,
+            }}
+          >
             {results.length} match{results.length !== 1 ? 'es' : ''}
+            {freeFormSearch ? (
+              <>
+                {' '}
+                <span style={{ fontWeight: 500 }}>· length filter off</span>
+              </>
+            ) : null}
           </div>
         </div>
 
