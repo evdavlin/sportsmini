@@ -449,54 +449,36 @@ export default function BuilderClient({
           padding: '20px 32px 0',
           maxWidth: 1400,
           margin: '0 auto',
-          alignItems: 'stretch',
+          alignItems: 'start',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-          }}
-        >
-          <LeftPane
-            dims={dims}
-            setDims={setDimsAndGrid}
-            mode={mode}
-            setMode={setMode}
-            grid={grid}
-            activeCell={activeCell}
-            direction={direction}
-            onCellClick={handleCellClick}
-            glossary={initialGlossary}
-            activeSlot={activeSlot}
-            onPlaceWord={handlePlaceWord}
-          />
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-            minHeight: 0,
-            height: '100%',
-          }}
-        >
-          <RightPane
-            activeSlot={activeSlot}
-            direction={direction}
-            search={search}
-            setSearch={setSearch}
-            lengthFilter={lengthFilter}
-            setLengthFilter={setLengthFilter}
-            positionFilter={positionFilter}
-            setPositionFilter={setPositionFilter}
-            freshFilter={freshFilter}
-            setFreshFilter={setFreshFilter}
-            results={filteredResults}
-            onPlaceWord={handlePlaceWord}
-          />
-        </div>
+        <LeftPane
+          dims={dims}
+          setDims={setDimsAndGrid}
+          mode={mode}
+          setMode={setMode}
+          grid={grid}
+          activeCell={activeCell}
+          direction={direction}
+          onCellClick={handleCellClick}
+          glossary={initialGlossary}
+          activeSlot={activeSlot}
+          onPlaceWord={handlePlaceWord}
+        />
+        <RightPane
+          activeSlot={activeSlot}
+          direction={direction}
+          search={search}
+          setSearch={setSearch}
+          lengthFilter={lengthFilter}
+          setLengthFilter={setLengthFilter}
+          positionFilter={positionFilter}
+          setPositionFilter={setPositionFilter}
+          freshFilter={freshFilter}
+          setFreshFilter={setFreshFilter}
+          results={filteredResults}
+          onPlaceWord={handlePlaceWord}
+        />
       </div>
 
       <div
@@ -1358,18 +1340,9 @@ function RightPane({
   onPlaceWord: (e: GlossaryEntry) => void
 }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-        minHeight: 0,
-        width: '100%',
-      }}
-    >
+    <div>
       <div
         style={{
-          flexShrink: 0,
           background: t.surface,
           border: `1px solid ${t.border}`,
           borderRadius: 6,
@@ -1452,16 +1425,12 @@ function RightPane({
 
       <div
         style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
           background: t.surface,
           border: `1px solid ${t.border}`,
           borderRadius: 6,
         }}
       >
-        <div style={{ flexShrink: 0, padding: '14px 16px 10px' }}>
+        <div style={{ padding: '14px 16px 10px' }}>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1481,7 +1450,7 @@ function RightPane({
           />
         </div>
 
-        <div style={{ flexShrink: 0, padding: '0 16px 12px' }}>
+        <div style={{ padding: '0 16px 12px' }}>
           <div
             style={{
               display: 'flex',
@@ -1543,9 +1512,8 @@ function RightPane({
 
         <div
           style={{
-            flex: 1,
-            minHeight: 0,
             borderTop: `1px solid ${t.borderSoft}`,
+            maxHeight: 540,
             overflowY: 'auto',
           }}
         >
