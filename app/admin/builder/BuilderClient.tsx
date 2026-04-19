@@ -10,7 +10,7 @@ import React, {
 import { useRouter } from 'next/navigation'
 
 import type { SavePayload } from '@/lib/builder-actions'
-import { deleteDraftAction, saveDraftAction } from '@/lib/builder-actions'
+import { deleteDraftFromBuilderAction, saveDraftAction } from '@/lib/builder-actions'
 import type {
   Cell,
   Direction,
@@ -171,11 +171,11 @@ export default function BuilderClient({
   const [title, setTitle] = useState(initialDraft?.title ?? '')
   const [difficulty, setDifficulty] = useState(initialDraft?.difficulty ?? 3)
   const [dims, setDims] = useState(() => ({
-    rows: initialDraft?.grid.length ?? 7,
-    cols: initialDraft?.grid[0]?.length ?? 7,
+    rows: initialDraft?.grid.length ?? 8,
+    cols: initialDraft?.grid[0]?.length ?? 8,
   }))
   const [grid, setGrid] = useState<GridType>(
-    () => initialDraft?.grid ?? blankGrid(7, 7)
+    () => initialDraft?.grid ?? blankGrid(8, 8)
   )
   const [mode, setMode] = useState<'fill' | 'shape'>('fill')
   const [activeCell, setActiveCell] = useState<[number, number] | null>(null)
@@ -210,6 +210,7 @@ export default function BuilderClient({
   }, [grid, activeCell, direction])
 
   const filteredResults = useMemo(() => {
+    // TODO Sprint 5: use useDeferredValue or precomputed indexes if profiling shows jank
     if (!activeSlot) return []
     const targetLen =
       lengthFilter === 'auto'
@@ -321,7 +322,7 @@ export default function BuilderClient({
     if (!puzzleId) return
     if (!window.confirm('Delete this draft permanently?')) return
     try {
-      await deleteDraftAction(puzzleId)
+      await deleteDraftFromBuilderAction(puzzleId)
       router.push('/admin/drafts')
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Delete failed')
@@ -875,6 +876,7 @@ function GridView({
       style={{
         width: gridW,
         height: gridH,
+        boxSizing: 'border-box',
         display: 'grid',
         gridTemplateColumns: `repeat(${dims.cols}, ${CELL_SIZE}px)`,
         gridTemplateRows: `repeat(${dims.rows}, ${CELL_SIZE}px)`,
@@ -907,6 +909,7 @@ function GridView({
               role="presentation"
               onClick={() => onCellClick(r, c)}
               style={{
+                boxSizing: 'border-box',
                 background: bg,
                 borderRight: c < dims.cols - 1 ? `1px solid ${t.borderStrong}` : 'none',
                 borderBottom: r < dims.rows - 1 ? `1px solid ${t.borderStrong}` : 'none',

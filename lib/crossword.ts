@@ -319,42 +319,30 @@ export function derivePlacedWords(
   return placed
 }
 
-function cellsInWords(grid: GridType): Set<string> {
-  const numbering = computeNumbering(grid)
-  const across = extractAcrossWords(grid, numbering)
-  const down = extractDownWords(grid, numbering)
-  const cells = new Set<string>()
-  for (const a of across) {
-    const word = a.word
-    for (let i = 0; i < word.length; i++) {
-      cells.add(`${a.row},${a.col + i}`)
-    }
-  }
-  for (const d of down) {
-    const word = d.word
-    for (let i = 0; i < word.length; i++) {
-      cells.add(`${d.row + i},${d.col}`)
-    }
-  }
-  return cells
-}
-
-function horizontalRunLength(grid: GridType, r: number, c: number): number {
-  if (grid[r][c] === null) return 0
+/** Length of the horizontal word slot containing (r,c); 0 if black. */
+function acrossSlotLengthAt(grid: GridType, r: number, c: number): number {
+  if (!grid[r] || grid[r][c] === null) return 0
+  let start = c
+  while (start > 0 && grid[r][start - 1] !== null) start--
   let len = 0
-  let col = c
-  while (col < grid[0].length && grid[r][col] !== null) {
+  let col = start
+  const w = grid[0].length
+  while (col < w && grid[r][col] !== null) {
     len++
     col++
   }
   return len
 }
 
-function verticalRunLength(grid: GridType, r: number, c: number): number {
-  if (grid[r][c] === null) return 0
+/** Length of the vertical word slot containing (r,c); 0 if black. */
+function downSlotLengthAt(grid: GridType, r: number, c: number): number {
+  if (!grid[r] || grid[r][c] === null) return 0
+  let start = r
+  while (start > 0 && grid[start - 1][c] !== null) start--
   let len = 0
-  let row = r
-  while (row < grid.length && grid[row][c] !== null) {
+  let row = start
+  const h = grid.length
+  while (row < h && grid[row][c] !== null) {
     len++
     row++
   }
@@ -371,34 +359,16 @@ export function detectValidationIssues(
   const h = grid.length
   const w = grid[0]?.length ?? 0
 
-  const inWord = cellsInWords(grid)
-
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
       if (grid[r][c] === null) continue
-      const k = `${r},${c}`
-      if (!inWord.has(k)) {
+      const acrossLen = acrossSlotLengthAt(grid, r, c)
+      const downLen = downSlotLengthAt(grid, r, c)
+      if (acrossLen === 1 && downLen === 1) {
         errors.push({
           key: `orphan-${r}-${c}`,
           type: 'error',
-          message: `Orphan letter cell at row ${r + 1}, col ${c + 1} (not in any word of length ≥2)`,
-        })
-      }
-    }
-  }
-
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      if (grid[r][c] === null) continue
-      const ha = horizontalRunLength(grid, r, c)
-      const va = verticalRunLength(grid, r, c)
-      const leftBound = c === 0 || grid[r][c - 1] === null
-      const topBound = r === 0 || grid[r - 1][c] === null
-      if (leftBound && topBound && ha === 1 && va === 1) {
-        errors.push({
-          key: `island-${r}-${c}`,
-          type: 'error',
-          message: `Single-letter island at row ${r + 1}, col ${c + 1}`,
+          message: `Isolated letter cell at row ${r + 1}, col ${c + 1} (across and down slots are both length 1)`,
         })
       }
     }

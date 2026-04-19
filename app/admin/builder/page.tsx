@@ -33,5 +33,6 @@ export default async function AdminBuilderPage({
     )
   }
 
+  // New session: blank 8×8 all-letter grid and matching dims (see BuilderClient defaults)
   return <BuilderClient initialGlossary={glossary} initialDraft={null} />
 }

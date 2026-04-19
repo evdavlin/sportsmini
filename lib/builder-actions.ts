@@ -70,7 +70,7 @@ export async function saveDraftAction(opts: {
   return { puzzleId: returnedId, isNew: false }
 }
 
-export async function deleteDraftAction(id: string): Promise<void> {
+export async function deleteDraftFromBuilderAction(id: string): Promise<void> {
   const { error } = await supabaseService.from('puzzles').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/drafts')
