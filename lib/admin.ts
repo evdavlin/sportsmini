@@ -46,11 +46,11 @@ function adminSort(a: AdminPuzzle, b: AdminPuzzle): number {
   return a.id.localeCompare(b.id)
 }
 
+const DEFAULT_ADMIN_PUZZLE_STATUSES = ['draft', 'queued', 'published', 'archived']
+
 export async function getAdminPuzzles(filters?: { status?: string[] }): Promise<AdminPuzzle[]> {
-  let q = supabaseService.from('puzzles').select('*')
-  if (filters?.status?.length) {
-    q = q.in('status', filters.status)
-  }
+  const statuses = filters?.status?.length ? filters.status : DEFAULT_ADMIN_PUZZLE_STATUSES
+  let q = supabaseService.from('puzzles').select('*').in('status', statuses)
   const { data: puzzles, error } = await q
   if (error || !puzzles) return []
 
