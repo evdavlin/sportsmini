@@ -151,8 +151,15 @@ function slotKey(number: number, direction: Direction): string {
 function classifyWord(
   wordUpper: string,
   clueText: string,
-  glossary: GlossaryEntry[]
+  glossary: GlossaryEntry[],
+  linkedGlossaryId?: string | null
 ): Pick<PlacedWord, 'glossaryId' | 'source'> {
+  if (linkedGlossaryId) {
+    const linked = glossary.find((g) => g.id === linkedGlossaryId)
+    if (linked && linked.word.toUpperCase() === wordUpper) {
+      return { glossaryId: linked.id, source: 'glossary' }
+    }
+  }
   const rows = glossary.filter((g) => g.word.toUpperCase() === wordUpper)
   if (rows.length === 0) {
     return { glossaryId: null, source: 'new-word' }
@@ -258,7 +265,8 @@ export function derivePlacedWords(
   grid: GridType,
   numbering: (number | null)[][],
   glossary: GlossaryEntry[],
-  existingClues: Map<string, string>
+  existingClues: Map<string, string>,
+  existingGlossaryIds?: Map<string, string | null>
 ): PlacedWord[] {
   const across = extractAcrossWords(grid, numbering)
   const down = extractDownWords(grid, numbering)
@@ -276,7 +284,8 @@ export function derivePlacedWords(
     const rowsW = glossary.filter((g) => g.word.toUpperCase() === a.word)
     const displayClue =
       clueText.trim() === '' && rowsW.length ? rowsW[0]!.clue : clueText
-    const { glossaryId, source } = classifyWord(a.word, clueText, glossary)
+    const linkedId = existingGlossaryIds?.get(slot) ?? null
+    const { glossaryId, source } = classifyWord(a.word, clueText, glossary, linkedId)
     placed.push({
       key,
       number: a.number,
@@ -302,7 +311,8 @@ export function derivePlacedWords(
     const rowsW = glossary.filter((g) => g.word.toUpperCase() === d.word)
     const displayClue =
       clueText.trim() === '' && rowsW.length ? rowsW[0]!.clue : clueText
-    const { glossaryId, source } = classifyWord(d.word, clueText, glossary)
+    const linkedIdDown = existingGlossaryIds?.get(slot) ?? null
+    const { glossaryId, source } = classifyWord(d.word, clueText, glossary, linkedIdDown)
     placed.push({
       key,
       number: d.number,

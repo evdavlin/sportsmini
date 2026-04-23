@@ -18,6 +18,7 @@ export type PuzzleClueRow = {
   direction: string
   word: string
   clue_text: string
+  glossary_id: string | null
 }
 
 function computeDaysSince(iso: string | null): number | null {
@@ -65,7 +66,7 @@ export async function loadDraftForEditing(
 
   const { data: clues, error: cluesErr } = await supabaseService
     .from('puzzle_clues')
-    .select('number, row, col, direction, word, clue_text')
+    .select('number, row, col, direction, word, clue_text, glossary_id')
     .eq('puzzle_id', id)
     .order('number', { ascending: true })
 
@@ -110,4 +111,14 @@ export function cluesToSlotMap(clues: PuzzleClueRow[]): Map<string, string> {
     m.set(`${c.number}-${dir}`, c.clue_text)
   }
   return m
+}
+
+export function cluesToGlossaryIdBySlot(clues: PuzzleClueRow[]): Record<string, string | null> {
+  const out: Record<string, string | null> = {}
+  for (const c of clues) {
+    const dir = c.direction === 'across' || c.direction === 'down' ? c.direction : 'across'
+    const gid = c.glossary_id
+    out[`${c.number}-${dir}`] = gid != null ? String(gid) : null
+  }
+  return out
 }

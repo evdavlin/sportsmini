@@ -169,6 +169,7 @@ export type BuilderClientProps = {
     difficulty: number
     grid: GridType
     clueBySlot: Record<string, string>
+    glossaryIdBySlot?: Record<string, string | null>
   } | null
 }
 
@@ -197,6 +198,9 @@ export default function BuilderClient({
   const [clueBySlot, setClueBySlot] = useState<Record<string, string>>(
     () => initialDraft?.clueBySlot ?? {}
   )
+  const [glossaryIdBySlot, setGlossaryIdBySlot] = useState<Record<string, string | null>>(
+    () => initialDraft?.glossaryIdBySlot ?? {}
+  )
   const [search, setSearch] = useState('')
   const [lengthFilter, setLengthFilter] = useState('auto')
   const [positionFilter, setPositionFilter] = useState('contains')
@@ -210,9 +214,14 @@ export default function BuilderClient({
 
   const clueMap = useMemo(() => new Map(Object.entries(clueBySlot)), [clueBySlot])
 
+  const glossaryIdMap = useMemo(
+    () => new Map(Object.entries(glossaryIdBySlot)),
+    [glossaryIdBySlot]
+  )
+
   const placedWords = useMemo(
-    () => derivePlacedWords(grid, numbering, glossary, clueMap),
-    [grid, numbering, glossary, clueMap]
+    () => derivePlacedWords(grid, numbering, glossary, clueMap, glossaryIdMap),
+    [grid, numbering, glossary, clueMap, glossaryIdMap]
   )
 
   const validation = useMemo(
@@ -333,10 +342,12 @@ export default function BuilderClient({
     setGrid(next)
     const sk = slotKeyFor(activeSlot.number, direction)
     setClueBySlot((prev) => ({ ...prev, [sk]: entry.clue }))
+    setGlossaryIdBySlot((prev) => ({ ...prev, [sk]: entry.id }))
   }
 
   function handleClueSlotEdit(slotKey: string, newClue: string) {
     setClueBySlot((prev) => ({ ...prev, [slotKey]: newClue }))
+    setGlossaryIdBySlot((prev) => ({ ...prev, [slotKey]: null }))
   }
 
   async function handleSave() {
