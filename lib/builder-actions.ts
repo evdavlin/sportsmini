@@ -95,6 +95,7 @@ export async function saveDraftAction(opts: {
       p_payload: payload,
     })
     if (error) throw new Error(error.message)
+    console.log('[saveDraft] rpc data', JSON.stringify(data))
     const id = extractPuzzleId(data)
     if (!id) {
       throw new Error(
@@ -115,6 +116,8 @@ export async function saveDraftAction(opts: {
   })
 
   if (error) throw new Error(error.message)
+
+  console.log('[saveDraft] rpc data', JSON.stringify(data))
 
   const returnedId = extractPuzzleId(data) ?? puzzleId
   revalidatePath('/admin/drafts')

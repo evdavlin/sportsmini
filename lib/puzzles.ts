@@ -67,6 +67,13 @@ export function buildPuzzlePayload(
   const pattern = (puzzleRow.grid as { pattern: string[] }).pattern
   if (!pattern?.length) return null
 
+  console.log('[buildPuzzlePayload] dims', {
+    dbW: puzzleRow.width,
+    dbH: puzzleRow.height,
+    patW: pattern[0]?.length,
+    patH: pattern.length,
+  })
+
   const grid: string[][] = pattern.map((row) =>
     row.split('').map((cell) => (cell === '#' ? '#' : ''))
   )
