@@ -5,6 +5,9 @@ Fixes v3's degenerate-shape problem. Adds two constraints:
 1. Letter-cell density must be at least 60% of total cells.
 2. Longest slot must be at least 5 letters (room for an anchor).
 
+Shape templates are loaded from Supabase: public.puzzles where status = shape_template
+(grid.pattern is a list of strings). By default one template is chosen at random per run.
+
 Runs locally. Never exposed as a web endpoint.
 
 Usage:
@@ -12,9 +15,10 @@ Usage:
     export SUPABASE_SERVICE_ROLE_KEY=<service role key>
 
     python3 scripts/generate_puzzles.py --count 10
-    python3 scripts/generate_puzzles.py --count 10 --min-dim 6 --max-dim 7
+    python3 scripts/generate_puzzles.py --count 10 --all-active
+    python3 scripts/generate_puzzles.py --shape-id <uuid> --count 5
+    python3 scripts/generate_puzzles.py --count 10 --min-dim 6 --max-dim 7 --evolve
     python3 scripts/generate_puzzles.py --count 10 --prefer-sport basketball
-    python3 scripts/generate_puzzles.py --shape shapes/brew_serena_style.json --count 5
     python3 scripts/generate_puzzles.py --purge-run 2026-04-23T14:22:01+00:00
 """
 
@@ -23,14 +27,12 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import itertools
-import json
 import os
 import random
 import sys
 import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 try:
@@ -614,6 +616,59 @@ def generate_fixed_shape(
     return successes
 
 
+# ---------- Shape templates (DB) ----------
+
+
+def load_shape_from_db(
+    supabase: Client, shape_id: Optional[str] = None
+) -> tuple[str, str, list[str]]:
+    """
+    Load one shape_template row. If shape_id is set, fetch that row; otherwise fetch all
+    shape_template rows and return one at random.
+
+    Returns (puzzle_uuid, title, pattern) where pattern is grid.pattern (list of strings).
+    """
+    if shape_id:
+        resp = (
+            supabase.table("puzzles")
+            .select("id,title,grid,status")
+            .eq("id", shape_id)
+            .eq("status", "shape_template")
+            .execute()
+        )
+        rows = resp.data or []
+        if len(rows) != 1:
+            raise RuntimeError(
+                f"No shape_template puzzle found with id={shape_id!r} (got {len(rows)} row(s))."
+            )
+        row = rows[0]
+    else:
+        resp = (
+            supabase.table("puzzles")
+            .select("id,title,grid")
+            .eq("status", "shape_template")
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            raise RuntimeError(
+                "No rows with status='shape_template' in public.puzzles; add shape templates in the DB first."
+            )
+        row = random.choice(rows)
+
+    title = (row.get("title") or "").strip() or "Untitled shape"
+    grid = row.get("grid")
+    if not isinstance(grid, dict):
+        raise RuntimeError(f"Puzzle {row.get('id')}: grid is missing or not a JSON object.")
+    pat = grid.get("pattern")
+    if not isinstance(pat, list) or not pat:
+        raise RuntimeError(f"Puzzle {row.get('id')}: grid.pattern is missing or empty.")
+    if not all(isinstance(line, str) for line in pat):
+        raise RuntimeError(f"Puzzle {row.get('id')}: grid.pattern must be a list of strings.")
+    sid = str(row["id"])
+    return sid, title, pat
+
+
 # ---------- DB I/O ----------
 
 def write_candidates(supabase: Client, payloads: list[dict]) -> int:
@@ -642,7 +697,24 @@ def main() -> int:
     ap.add_argument("--min-dim", type=int, default=DEFAULT_MIN_DIM)
     ap.add_argument("--max-dim", type=int, default=DEFAULT_MAX_DIM)
     ap.add_argument("--prefer-sport", type=str, default=None)
-    ap.add_argument("--shape", type=Path, default=None)
+    shape_mx = ap.add_mutually_exclusive_group()
+    shape_mx.add_argument(
+        "--shape-id",
+        type=str,
+        default=None,
+        metavar="UUID",
+        help="Use a specific shape template (puzzles.id where status=shape_template).",
+    )
+    shape_mx.add_argument(
+        "--all-active",
+        action="store_true",
+        help="Pick a random shape_template row (same as default when neither flag is set).",
+    )
+    ap.add_argument(
+        "--evolve",
+        action="store_true",
+        help="Ignore DB shapes; evolve random grids within --min-dim/--max-dim (legacy mode).",
+    )
     ap.add_argument("--time-budget", type=float, default=20.0)
     ap.add_argument("--purge-run", type=str, default=None)
     ap.add_argument("--seed", type=int, default=None)
@@ -673,14 +745,32 @@ def main() -> int:
     print(f"Loaded {len(glossary)} entries")
     by_length = index_by_length(glossary)
 
-    if args.shape:
-        name = args.shape.stem
-        pattern = json.loads(args.shape.read_text())["pattern"]
-        print(f"Fixed shape: {name} ({shape_dims(pattern)[0]}x{shape_dims(pattern)[1]})")
-        successes = generate_fixed_shape(pattern, name, by_length, args.count, args.time_budget)
-    else:
+    if args.evolve:
+        if args.shape_id or args.all_active:
+            ap.error("--evolve cannot be used with --shape-id or --all-active")
         print(f"Shape evolution: {args.min_dim}x{args.min_dim} to {args.max_dim}x{args.max_dim}")
         successes = generate_with_evolution(by_length, args.count, args.min_dim, args.max_dim, rng)
+    else:
+        try:
+            sid, shape_title, pattern = load_shape_from_db(
+                supabase, args.shape_id if args.shape_id else None
+            )
+        except RuntimeError as e:
+            sys.stderr.write(f"{e}\n")
+            return 2
+        if args.shape_id:
+            sel = "specific (--shape-id)"
+        elif args.all_active:
+            sel = "random (--all-active)"
+        else:
+            sel = "random (default)"
+        h0, w0 = shape_dims(pattern)
+        print(
+            f"Shape selection [{sel}]: id={sid} | title={shape_title!r} | grid={h0}x{w0}"
+        )
+        successes = generate_fixed_shape(
+            pattern, shape_title, by_length, args.count, args.time_budget
+        )
 
     if not successes:
         print("No successful fills generated.")
