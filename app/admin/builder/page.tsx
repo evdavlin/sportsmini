@@ -14,10 +14,14 @@ export const dynamic = 'force-dynamic'
 export default async function AdminBuilderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string }>
+  searchParams: Promise<{ id?: string; mode?: string }>
 }) {
+  const { id, mode } = await searchParams
+  if (mode === 'shape' && !id) {
+    return <BuilderClient initialGlossary={[]} initialDraft={null} shapeAuthoring />
+  }
+
   const glossary = await loadGlossary()
-  const { id } = await searchParams
 
   if (id) {
     const draft = await loadDraftForEditing(id)

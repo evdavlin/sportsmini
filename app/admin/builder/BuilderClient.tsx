@@ -15,6 +15,7 @@ import {
   deleteDraftFromBuilderAction,
   saveDraftAction,
 } from '@/lib/builder-actions'
+import { createShapeTemplateAction } from '@/lib/shape-actions'
 import type {
   Cell,
   Direction,
@@ -171,11 +172,14 @@ export type BuilderClientProps = {
     clueBySlot: Record<string, string>
     glossaryIdBySlot?: Record<string, string | null>
   } | null
+  /** New shape template flow: grid only, save via create_shape_template RPC */
+  shapeAuthoring?: boolean
 }
 
 export default function BuilderClient({
   initialGlossary,
   initialDraft,
+  shapeAuthoring = false,
 }: BuilderClientProps) {
   const router = useRouter()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -192,7 +196,7 @@ export default function BuilderClient({
   const [grid, setGrid] = useState<GridType>(
     () => initialDraft?.grid ?? blankGrid(8, 8)
   )
-  const [mode, setMode] = useState<'fill' | 'shape'>('fill')
+  const [mode, setMode] = useState<'fill' | 'shape'>(shapeAuthoring ? 'shape' : 'fill')
   const [activeCell, setActiveCell] = useState<[number, number] | null>(null)
   const [direction, setDirection] = useState<Direction>('across')
   const [clueBySlot, setClueBySlot] = useState<Record<string, string>>(
@@ -355,6 +359,19 @@ export default function BuilderClient({
     setSaving(true)
     setSaveError(null)
     try {
+      if (shapeAuthoring) {
+        const pattern = grid.map((row) =>
+          row.map((cell) => (cell === null ? '#' : '.')).join('')
+        )
+        await createShapeTemplateAction({
+          title: title.trim() || 'Untitled shape',
+          width: grid[0]?.length ?? 0,
+          height: grid.length,
+          grid: { pattern },
+        })
+        router.push('/admin/shapes')
+        return
+      }
       const payload = buildSavePayload(title, difficulty, grid, placedWords)
       const { puzzleId: id } = await saveDraftAction({
         puzzleId,
@@ -456,7 +473,8 @@ export default function BuilderClient({
         puzzleId={puzzleId}
         menuOpen={menuOpen}
         setMenuOpen={setMenuOpen}
-        onBack={() => router.push('/admin/drafts')}
+        shapeAuthoring={shapeAuthoring}
+        onBack={() => router.push(shapeAuthoring ? '/admin/shapes' : '/admin/drafts')}
         onSave={handleSave}
         onDeleteDraft={handleDeleteDraft}
       />
@@ -464,7 +482,7 @@ export default function BuilderClient({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 440px',
+          gridTemplateColumns: shapeAuthoring ? '1fr' : '1fr 440px',
           gap: 20,
           padding: '20px 32px 0',
           maxWidth: 1400,
@@ -484,41 +502,56 @@ export default function BuilderClient({
           glossary={glossary}
           activeSlot={activeSlot}
           onPlaceWord={handlePlaceWord}
+          shapeAuthoring={shapeAuthoring}
         />
-        <RightPane
-          activeSlot={activeSlot}
-          direction={direction}
-          search={search}
-          setSearch={setSearch}
-          lengthFilter={lengthFilter}
-          setLengthFilter={setLengthFilter}
-          positionFilter={positionFilter}
-          setPositionFilter={setPositionFilter}
-          freshFilter={freshFilter}
-          setFreshFilter={setFreshFilter}
-          results={filteredResults}
-          onPlaceWord={handlePlaceWord}
-        />
+        {!shapeAuthoring ? (
+          <RightPane
+            activeSlot={activeSlot}
+            direction={direction}
+            search={search}
+            setSearch={setSearch}
+            lengthFilter={lengthFilter}
+            setLengthFilter={setLengthFilter}
+            positionFilter={positionFilter}
+            setPositionFilter={setPositionFilter}
+            freshFilter={freshFilter}
+            setFreshFilter={setFreshFilter}
+            results={filteredResults}
+            onPlaceWord={handlePlaceWord}
+          />
+        ) : null}
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 360px',
-          gap: 20,
-          padding: '20px 32px 40px',
-          maxWidth: 1400,
-          margin: '0 auto',
-        }}
-      >
-        <PlacedWordsPanel
-          placedWords={placedWords}
-          glossary={glossary}
-          onClueEdit={handleClueSlotEdit}
-          onGlossaryEntryAdded={handleGlossaryEntryAdded}
-        />
-        <ValidationPanel errors={validation.errors} warnings={validation.warnings} />
-      </div>
+      {!shapeAuthoring ? (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 360px',
+            gap: 20,
+            padding: '20px 32px 40px',
+            maxWidth: 1400,
+            margin: '0 auto',
+          }}
+        >
+          <PlacedWordsPanel
+            placedWords={placedWords}
+            glossary={glossary}
+            onClueEdit={handleClueSlotEdit}
+            onGlossaryEntryAdded={handleGlossaryEntryAdded}
+          />
+          <ValidationPanel errors={validation.errors} warnings={validation.warnings} />
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: '20px 32px 40px',
+            maxWidth: 1400,
+            margin: '0 auto',
+          }}
+        >
+          <ValidationPanel errors={validation.errors} warnings={validation.warnings} />
+        </div>
+      )}
     </div>
   )
 }
@@ -534,6 +567,7 @@ function BuilderTopBar({
   puzzleId,
   menuOpen,
   setMenuOpen,
+  shapeAuthoring,
   onBack,
   onSave,
   onDeleteDraft,
@@ -548,6 +582,7 @@ function BuilderTopBar({
   puzzleId: string | null
   menuOpen: boolean
   setMenuOpen: (v: boolean) => void
+  shapeAuthoring: boolean
   onBack: () => void
   onSave: () => void
   onDeleteDraft: () => void
@@ -580,7 +615,7 @@ function BuilderTopBar({
           fontFamily: 'inherit',
         }}
       >
-        ← Drafts
+        {shapeAuthoring ? '← Shapes' : '← Drafts'}
       </button>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 200 }}>
@@ -600,7 +635,7 @@ function BuilderTopBar({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Untitled puzzle"
+            placeholder={shapeAuthoring ? 'Untitled shape' : 'Untitled puzzle'}
             style={{
               width: '100%',
               background: 'transparent',
@@ -616,38 +651,40 @@ function BuilderTopBar({
           />
         </div>
 
-        <div>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: 1.5,
-              color: t.textMuted,
-              marginBottom: 4,
-              textTransform: 'uppercase',
-            }}
-          >
-            Difficulty
+        {!shapeAuthoring ? (
+          <div>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                color: t.textMuted,
+                marginBottom: 4,
+                textTransform: 'uppercase',
+              }}
+            >
+              Difficulty
+            </div>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setDifficulty(n)}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    background: n <= difficulty ? t.hero : t.borderSoft,
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                />
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 3 }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setDifficulty(n)}
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: n <= difficulty ? t.hero : t.borderSoft,
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              />
-            ))}
-          </div>
-        </div>
+        ) : null}
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -685,9 +722,9 @@ function BuilderTopBar({
             letterSpacing: 1,
           }}
         >
-          {saving ? 'SAVING…' : 'SAVE DRAFT'}
+          {saving ? 'SAVING…' : shapeAuthoring ? 'SAVE SHAPE TEMPLATE' : 'SAVE DRAFT'}
         </button>
-        {puzzleId ? (
+        {puzzleId && !shapeAuthoring ? (
           <div style={{ position: 'relative' }}>
             <button
               type="button"
@@ -1056,6 +1093,7 @@ function LeftPane({
   glossary,
   activeSlot,
   onPlaceWord,
+  shapeAuthoring,
 }: {
   dims: { rows: number; cols: number }
   setDims: (d: { rows: number; cols: number }) => void
@@ -1068,6 +1106,7 @@ function LeftPane({
   glossary: GlossaryEntry[]
   activeSlot: Slot | null
   onPlaceWord: (e: GlossaryEntry) => void
+  shapeAuthoring: boolean
 }) {
   const numbering = useMemo(() => computeNumbering(grid), [grid])
 
@@ -1091,14 +1130,20 @@ function LeftPane({
           flexWrap: 'wrap',
         }}
       >
-        <ModeToggle mode={mode} setMode={setMode} />
-        <div style={{ width: 1, height: 24, background: t.borderSoft }} />
+        {!shapeAuthoring ? (
+          <>
+            <ModeToggle mode={mode} setMode={setMode} />
+            <div style={{ width: 1, height: 24, background: t.borderSoft }} />
+          </>
+        ) : null}
         <DimensionsPicker dims={dims} setDims={setDims} />
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 11, color: t.textMuted, letterSpacing: 0.5 }}>
-          {mode === 'fill'
-            ? 'Click a cell to select · Tab flips direction · Type letters directly'
-            : 'Click any cell to toggle black/letter'}
+          {shapeAuthoring
+            ? 'Shape template: toggle black vs letter cells · set dimensions above'
+            : mode === 'fill'
+              ? 'Click a cell to select · Tab flips direction · Type letters directly'
+              : 'Click any cell to toggle black/letter'}
         </div>
       </div>
 
@@ -1123,17 +1168,19 @@ function LeftPane({
         />
       </div>
 
-      <div
-        style={{
-          marginTop: 18,
-          background: t.surface,
-          border: `1px solid ${t.border}`,
-          borderRadius: 6,
-          padding: '18px 20px 16px',
-        }}
-      >
-        <WordExplorer glossary={glossary} activeSlot={activeSlot} onPlaceWord={onPlaceWord} />
-      </div>
+      {!shapeAuthoring ? (
+        <div
+          style={{
+            marginTop: 18,
+            background: t.surface,
+            border: `1px solid ${t.border}`,
+            borderRadius: 6,
+            padding: '18px 20px 16px',
+          }}
+        >
+          <WordExplorer glossary={glossary} activeSlot={activeSlot} onPlaceWord={onPlaceWord} />
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -70,6 +70,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <NavLink href="/admin/queue">Queue</NavLink>
             <NavLink href="/admin/drafts">Drafts</NavLink>
             <NavLink href="/admin/builder">Builder</NavLink>
+            <NavLink href="/admin/shapes">Shapes</NavLink>
             <NavLink href="/admin/history">History</NavLink>
           </nav>
         </div>

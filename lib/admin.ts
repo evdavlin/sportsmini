@@ -25,6 +25,19 @@ export type PipelineSummaryRow = {
   live_puzzle: Record<string, unknown> | null
 }
 
+/** Row from public.shape_templates_view */
+export type ShapeTemplateRow = {
+  id: string
+  title: string | null
+  width: number
+  height: number
+  grid: unknown
+  created_at: string
+  updated_at: string
+  letter_cell_count: number | null
+  total_cells: number | null
+}
+
 function adminSort(a: AdminPuzzle, b: AdminPuzzle): number {
   const rank = (s: string) =>
     ({ published: 0, queued: 1, draft: 2, archived: 3 }[s] ?? 99)
@@ -78,6 +91,30 @@ export async function getAdminPuzzles(filters?: { status?: string[] }): Promise<
 
   rows.sort(adminSort)
   return rows
+}
+
+export async function getShapeTemplates(): Promise<ShapeTemplateRow[]> {
+  const { data, error } = await supabaseService
+    .from('shape_templates_view')
+    .select(
+      'id, title, width, height, grid, created_at, updated_at, letter_cell_count, total_cells',
+    )
+    .order('created_at', { ascending: false })
+
+  if (error || !data?.length) return []
+
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id),
+    title: (row.title as string | null) ?? null,
+    width: Number(row.width ?? 0),
+    height: Number(row.height ?? 0),
+    grid: row.grid,
+    created_at: String(row.created_at ?? ''),
+    updated_at: String(row.updated_at ?? ''),
+    letter_cell_count:
+      row.letter_cell_count == null ? null : Number(row.letter_cell_count),
+    total_cells: row.total_cells == null ? null : Number(row.total_cells),
+  }))
 }
 
 export async function getPipelineSummary(): Promise<PipelineSummaryRow> {
