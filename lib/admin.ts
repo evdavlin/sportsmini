@@ -38,6 +38,27 @@ export type ShapeTemplateRow = {
   total_cells: number | null
 }
 
+export type AdminCandidate = {
+  id: string
+  shape_id: string
+  /** `puzzles.title` for the shape, when the row still exists */
+  shape_title: string | null
+  /** Denormalized name from the generator */
+  shape_name: string | null
+  grid: unknown
+  width: number
+  height: number
+  clues: unknown
+  quality_score: number
+  sport_breakdown: Record<string, number> | null
+  generator_run: string | null
+  status: string
+  promoted_puzzle_id: string | null
+  review_notes: string | null
+  created_at: string
+  reviewed_at: string | null
+}
+
 function adminSort(a: AdminPuzzle, b: AdminPuzzle): number {
   const rank = (s: string) =>
     ({ published: 0, queued: 1, draft: 2, archived: 3 }[s] ?? 99)
@@ -63,7 +84,7 @@ const DEFAULT_ADMIN_PUZZLE_STATUSES = ['draft', 'queued', 'published', 'archived
 
 export async function getAdminPuzzles(filters?: { status?: string[] }): Promise<AdminPuzzle[]> {
   const statuses = filters?.status?.length ? filters.status : DEFAULT_ADMIN_PUZZLE_STATUSES
-  let q = supabaseService.from('puzzles').select('*').in('status', statuses)
+  const q = supabaseService.from('puzzles').select('*').in('status', statuses)
   const { data: puzzles, error } = await q
   if (error || !puzzles) return []
 
@@ -248,4 +269,99 @@ export async function getPuzzlePayloadForAdmin(puzzleId: string): Promise<Puzzle
   if (!clues) return null
 
   return buildPuzzlePayload(puzzle as PuzzleRowPayload, clues as PuzzleClueRowPayload[])
+}
+
+export type GetCandidatesFilters = {
+  status?: 'pending' | 'promoted' | 'rejected' | 'all'
+  shapeName?: string | null
+  sort?: 'quality_score' | 'created_at'
+}
+
+function mapCandidateRow(row: Record<string, unknown>): Omit<AdminCandidate, 'shape_title'> {
+  return {
+    id: String(row.id),
+    shape_id: String(row.shape_id ?? ''),
+    shape_name: (row.shape_name as string | null) ?? null,
+    grid: row.grid,
+    width: Number(row.width ?? 0),
+    height: Number(row.height ?? 0),
+    clues: row.clues,
+    quality_score: Number(row.quality_score ?? 0),
+    sport_breakdown:
+      row.sport_breakdown && typeof row.sport_breakdown === 'object'
+        ? (row.sport_breakdown as Record<string, number>)
+        : null,
+    generator_run: (row.generator_run as string | null) ?? null,
+    status: String(row.status ?? ''),
+    promoted_puzzle_id: (row.promoted_puzzle_id as string | null) ?? null,
+    review_notes: (row.review_notes as string | null) ?? null,
+    created_at: String(row.created_at ?? ''),
+    reviewed_at: (row.reviewed_at as string | null) ?? null,
+  }
+}
+
+export async function getPendingCandidateCount(): Promise<number> {
+  const { count, error } = await supabaseService
+    .from('puzzle_candidates')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pending')
+
+  if (error) return 0
+  return count ?? 0
+}
+
+export async function getCandidateShapeNames(): Promise<string[]> {
+  const { data, error } = await supabaseService.from('puzzle_candidates').select('shape_name')
+  if (error || !data?.length) return []
+
+  const set = new Set<string>()
+  for (const row of data) {
+    const n = (row as { shape_name: string | null }).shape_name
+    if (n && n.trim()) set.add(n.trim())
+  }
+  return [...set].sort((a, b) => a.localeCompare(b))
+}
+
+export async function getCandidates(filters?: GetCandidatesFilters): Promise<AdminCandidate[]> {
+  const status = filters?.status ?? 'pending'
+  const shapeName = filters?.shapeName?.trim() || null
+  const sort = filters?.sort ?? 'quality_score'
+
+  let q = supabaseService.from('puzzle_candidates').select('*')
+  if (status !== 'all') {
+    q = q.eq('status', status)
+  }
+  if (shapeName) {
+    q = q.eq('shape_name', shapeName)
+  }
+
+  if (sort === 'created_at') {
+    q = q.order('created_at', { ascending: false }).order('quality_score', { ascending: false })
+  } else {
+    q = q.order('quality_score', { ascending: false }).order('created_at', { ascending: false })
+  }
+
+  const { data: rows, error } = await q
+  if (error || !rows?.length) return []
+
+  const mapped = (rows as Record<string, unknown>[]).map(mapCandidateRow)
+  const shapeIds = [...new Set(mapped.map((r) => r.shape_id).filter(Boolean))]
+  const titleByShapeId = new Map<string, string | null>()
+
+  if (shapeIds.length) {
+    const { data: puzzles } = await supabaseService
+      .from('puzzles')
+      .select('id, title')
+      .in('id', shapeIds)
+
+    for (const p of puzzles ?? []) {
+      const id = (p as { id: string }).id
+      titleByShapeId.set(id, ((p as { title: string | null }).title ?? null) as string | null)
+    }
+  }
+
+  return mapped.map((r) => ({
+    ...r,
+    shape_title: titleByShapeId.get(r.shape_id) ?? null,
+  }))
 }
