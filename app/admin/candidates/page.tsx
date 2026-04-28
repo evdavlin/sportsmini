@@ -1,4 +1,5 @@
 import {
+  getActiveShapeTemplates,
   getCandidateShapeNames,
   getCandidates,
   getPendingCandidateCount,
@@ -27,16 +28,18 @@ export default async function AdminCandidatesPage({
   const sort = sp.sort === 'created_at' ? 'created_at' : 'quality_score'
   const shapeName = sp.shape?.trim() || null
 
-  const [candidates, shapeNames, pendingCount] = await Promise.all([
+  const [candidates, shapeNames, pendingCount, activeShapes] = await Promise.all([
     getCandidates({ status, shapeName: shapeName || null, sort }),
     getCandidateShapeNames(),
     getPendingCandidateCount(),
+    getActiveShapeTemplates(),
   ])
 
   return (
     <CandidatesClient
       initialCandidates={candidates}
       shapeNames={shapeNames}
+      activeShapes={activeShapes}
       pendingCount={pendingCount}
       initialFilters={{ status, shapeName: shapeName || '', sort }}
     />

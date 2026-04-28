@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import SolveScreen from '@/app/components/SolveScreen'
 import {
+  generateCandidatesAction,
   promoteCandidateAction,
   purgeRunAction,
   rejectCandidateAction,
 } from '@/lib/candidate-actions'
-import type { AdminCandidate, GetCandidatesFilters } from '@/lib/admin'
+import { AdminBottomMessage } from '@/app/admin/AdminBottomMessage'
+import type { ActiveShapeTemplateRow, AdminCandidate, GetCandidatesFilters } from '@/lib/admin'
 import { buildPuzzlePayload } from '@/lib/puzzles'
 import type { PuzzleClueRowPayload, PuzzlePayload, PuzzleRowPayload } from '@/lib/puzzles'
 import { theme } from '@/app/components/theme'
@@ -182,14 +184,21 @@ function displayShapeLine(c: AdminCandidate): string {
   return `${name} · ${c.width}×${c.height}`
 }
 
+function formatTopScore(n: number | null): string {
+  if (n == null) return '—'
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
 export function CandidatesClient({
   initialCandidates,
   shapeNames,
+  activeShapes,
   pendingCount,
   initialFilters,
 }: {
   initialCandidates: AdminCandidate[]
   shapeNames: string[]
+  activeShapes: ActiveShapeTemplateRow[]
   pendingCount: number
   initialFilters: Filters
 }) {
@@ -198,6 +207,12 @@ export function CandidatesClient({
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<AdminCandidate | null>(null)
   const [pending, startTransition] = useTransition()
+  const [isGenPending, startGenTransition] = useTransition()
+  const [generateModalOpen, setGenerateModalOpen] = useState(false)
+  const [modalShapeId, setModalShapeId] = useState('')
+  const [modalCount, setModalCount] = useState('3')
+  const [genFlash, setGenFlash] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
+  const clearGenFlash = useCallback(() => setGenFlash(null), [])
 
   const setFilters = useCallback(
     (next: Partial<Filters>) => {
@@ -224,6 +239,15 @@ export function CandidatesClient({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [preview, closeModal])
+
+  useEffect(() => {
+    if (!generateModalOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setGenerateModalOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [generateModalOpen])
 
   const groups = useMemo(() => groupByRun(initialCandidates), [initialCandidates])
 
@@ -259,6 +283,12 @@ export function CandidatesClient({
         </div>
       ) : null}
 
+      <AdminBottomMessage
+        text={genFlash?.text ?? null}
+        variant={genFlash?.kind === 'ok' ? 'success' : 'error'}
+        onDone={clearGenFlash}
+      />
+
       <div
         style={{
           display: 'flex',
@@ -275,22 +305,141 @@ export function CandidatesClient({
         </div>
         <button
           type="button"
-          disabled
-          title="Coming next"
+          disabled={isGenPending}
+          onClick={() => setGenerateModalOpen(true)}
           style={{
             padding: '10px 18px',
-            background: s.border,
-            color: s.textMuted,
+            background: isGenPending ? s.border : s.hero,
+            color: isGenPending ? s.textMuted : '#fff',
             borderRadius: 4,
             fontWeight: 700,
             fontSize: 13,
             border: 'none',
-            cursor: 'not-allowed',
+            cursor: isGenPending ? 'wait' : 'pointer',
+            opacity: isGenPending ? 0.9 : 1,
           }}
         >
-          Generate candidates
+          {isGenPending ? 'Generating…' : 'Generate candidates'}
         </button>
       </div>
+
+      {generateModalOpen ? (
+        <div
+          role="presentation"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 155,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => !isGenPending && setGenerateModalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal
+            style={{
+              width: '100%',
+              maxWidth: 400,
+              background: s.surface,
+              borderRadius: 8,
+              border: `1px solid ${s.border}`,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
+              padding: 20,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800 }}>Generate candidates</h2>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: s.textMuted, marginBottom: 14 }}>
+              Shape
+              <select
+                value={modalShapeId}
+                onChange={(e) => setModalShapeId(e.target.value)}
+                disabled={isGenPending}
+                style={{ padding: 10, borderRadius: 4, border: `1px solid ${s.border}`, fontSize: 14 }}
+              >
+                <option value="">Random active shape</option>
+                {activeShapes.map((sh) => (
+                  <option key={sh.id} value={sh.id}>
+                    {(sh.title && sh.title.trim()) || 'Untitled'} ({sh.width}×{sh.height})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: s.textMuted, marginBottom: 20 }}>
+              Count
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={modalCount}
+                disabled={isGenPending}
+                onChange={(e) => setModalCount(e.target.value)}
+                style={{ padding: 10, borderRadius: 4, border: `1px solid ${s.border}`, fontSize: 14, width: 120 }}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={isGenPending}
+                onClick={() => setGenerateModalOpen(false)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 4,
+                  border: `1px solid ${s.border}`,
+                  background: 'transparent',
+                  fontWeight: 600,
+                  cursor: isGenPending ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isGenPending}
+                onClick={() => {
+                  startGenTransition(async () => {
+                    const raw = Number.parseInt(modalCount, 10)
+                    const count = Number.isFinite(raw) ? Math.min(10, Math.max(1, raw)) : 3
+                    const res = await generateCandidatesAction({
+                      shape_id: modalShapeId || undefined,
+                      count,
+                    })
+                    if (res.success) {
+                      setGenFlash({
+                        kind: 'ok',
+                        text: `Generated ${res.candidate_count} candidates (top score ${formatTopScore(res.top_score)})`,
+                      })
+                      setGenerateModalOpen(false)
+                      router.refresh()
+                    } else {
+                      setGenFlash({
+                        kind: 'err',
+                        text: res.error ?? 'Generation failed',
+                      })
+                    }
+                  })
+                }}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 4,
+                  border: 'none',
+                  background: s.hero,
+                  color: '#fff',
+                  fontWeight: 700,
+                  cursor: isGenPending ? 'wait' : 'pointer',
+                  opacity: isGenPending ? 0.85 : 1,
+                }}
+              >
+                {isGenPending ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{

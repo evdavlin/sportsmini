@@ -3,7 +3,66 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { generateCandidates, SHAPE_FILL_TIME_BUDGET_MS } from '@/lib/solver'
 import { supabaseService } from '@/lib/supabase-service'
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export type GenerateCandidatesActionResult = {
+  success: boolean
+  candidate_count: number
+  top_score: number | null
+  top_words: string[] | null
+  error?: string
+}
+
+/** Runs the same pipeline as POST /api/generate-candidates (solver + DB writes). */
+export async function generateCandidatesAction(opts: {
+  shape_id?: string | null
+  count: number
+}): Promise<GenerateCandidatesActionResult> {
+  const rawCount = opts.count
+  const count = Math.min(10, Math.max(1, Math.floor(Number(rawCount)) || 3))
+
+  let shapeId: string | undefined
+  const rawSid = opts.shape_id
+  if (rawSid !== undefined && rawSid !== null && String(rawSid).trim() !== '') {
+    const sid = String(rawSid).trim()
+    if (!UUID_RE.test(sid)) {
+      return {
+        success: false,
+        candidate_count: 0,
+        top_score: null,
+        top_words: null,
+        error: 'shape_id must be a valid UUID',
+      }
+    }
+    shapeId = sid
+  }
+
+  const result = await generateCandidates(supabaseService, {
+    shapeId,
+    count,
+    wallDeadlineMs: 58_000,
+    solverTimeBudgetSec: SHAPE_FILL_TIME_BUDGET_MS / 1000,
+  })
+
+  const payload: GenerateCandidatesActionResult = {
+    success: result.success,
+    candidate_count: result.candidate_count,
+    top_score: result.top_score,
+    top_words: result.top_words,
+    ...(result.error ? { error: result.error } : {}),
+  }
+
+  if (result.success) {
+    revalidatePath('/admin/candidates')
+    revalidatePath('/admin/shapes')
+  }
+
+  return payload
+}
 
 type CandidateClue = {
   word: string

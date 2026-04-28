@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { DeleteShapeTemplateButton } from '@/app/admin/shapes/DeleteShapeTemplateButton'
+import { ShapeGenerateButton } from '@/app/admin/shapes/ShapeGenerateButton'
 import { getShapeTemplates } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
@@ -133,7 +134,10 @@ export default async function AdminShapesPage() {
                   Created {new Date(row.created_at).toLocaleString()}
                 </div>
               </div>
-              <DeleteShapeTemplateButton shapeId={row.id} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <ShapeGenerateButton shapeId={row.id} />
+                <DeleteShapeTemplateButton shapeId={row.id} />
+              </div>
             </div>
           )
         })}

@@ -38,6 +38,14 @@ export type ShapeTemplateRow = {
   total_cells: number | null
 }
 
+/** Active shape templates for generator dropdown (`puzzles` rows). */
+export type ActiveShapeTemplateRow = {
+  id: string
+  title: string | null
+  width: number
+  height: number
+}
+
 export type AdminCandidate = {
   id: string
   shape_id: string
@@ -135,6 +143,24 @@ export async function getShapeTemplates(): Promise<ShapeTemplateRow[]> {
     letter_cell_count:
       row.letter_cell_count == null ? null : Number(row.letter_cell_count),
     total_cells: row.total_cells == null ? null : Number(row.total_cells),
+  }))
+}
+
+export async function getActiveShapeTemplates(): Promise<ActiveShapeTemplateRow[]> {
+  const { data, error } = await supabaseService
+    .from('puzzles')
+    .select('id, title, width, height')
+    .eq('status', 'shape_template')
+    .eq('is_active', true)
+    .order('title', { ascending: true, nullsFirst: false })
+
+  if (error || !data?.length) return []
+
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id),
+    title: (row.title as string | null) ?? null,
+    width: Number(row.width ?? 0),
+    height: Number(row.height ?? 0),
   }))
 }
 
