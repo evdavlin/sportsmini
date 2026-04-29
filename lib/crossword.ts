@@ -144,8 +144,9 @@ export function matchesPattern(word: string, pattern: string[]): boolean {
   return true
 }
 
-function slotKey(number: number, direction: Direction): string {
-  return `${number}-${direction}`
+/** Stable slot id for clue/glossary maps: start cell + direction (must match `cluesToSlotMap` in builder). */
+export function slotKeyByPosition(row: number, col: number, direction: Direction): string {
+  return `${row}-${col}-${direction}`
 }
 
 function classifyWord(
@@ -274,7 +275,7 @@ export function derivePlacedWords(
 
   for (const a of across) {
     const key = `${a.number}-across-${a.row}-${a.col}`
-    const slot = slotKey(a.number, 'across')
+    const slot = slotKeyByPosition(a.row, a.col, 'across')
     let clueText: string
     if (existingClues.has(slot)) {
       clueText = existingClues.get(slot) ?? ''
@@ -301,7 +302,7 @@ export function derivePlacedWords(
 
   for (const d of down) {
     const key = `${d.number}-down-${d.row}-${d.col}`
-    const slot = slotKey(d.number, 'down')
+    const slot = slotKeyByPosition(d.row, d.col, 'down')
     let clueText: string
     if (existingClues.has(slot)) {
       clueText = existingClues.get(slot) ?? ''

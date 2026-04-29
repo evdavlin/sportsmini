@@ -1,4 +1,5 @@
 import type { GlossaryEntry, GridType } from '@/lib/crossword'
+import { slotKeyByPosition, type Direction } from '@/lib/crossword'
 import { supabaseService } from '@/lib/supabase-service'
 
 export type PuzzleRow = {
@@ -104,11 +105,15 @@ export function gridFromDraft(pattern: string[], clues: PuzzleClueRow[]): GridTy
   return grid
 }
 
+function normalizeClueDirection(d: string): Direction {
+  return d === 'across' || d === 'down' ? d : 'across'
+}
+
 export function cluesToSlotMap(clues: PuzzleClueRow[]): Map<string, string> {
   const m = new Map<string, string>()
   for (const c of clues) {
-    const dir = c.direction === 'across' || c.direction === 'down' ? c.direction : 'across'
-    m.set(`${c.number}-${dir}`, c.clue_text)
+    const dir = normalizeClueDirection(c.direction)
+    m.set(slotKeyByPosition(c.row, c.col, dir), c.clue_text)
   }
   return m
 }
@@ -116,9 +121,9 @@ export function cluesToSlotMap(clues: PuzzleClueRow[]): Map<string, string> {
 export function cluesToGlossaryIdBySlot(clues: PuzzleClueRow[]): Record<string, string | null> {
   const out: Record<string, string | null> = {}
   for (const c of clues) {
-    const dir = c.direction === 'across' || c.direction === 'down' ? c.direction : 'across'
+    const dir = normalizeClueDirection(c.direction)
     const gid = c.glossary_id
-    out[`${c.number}-${dir}`] = gid != null ? String(gid) : null
+    out[slotKeyByPosition(c.row, c.col, dir)] = gid != null ? String(gid) : null
   }
   return out
 }

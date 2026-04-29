@@ -32,6 +32,7 @@ import {
   derivePlacedWords,
   detectValidationIssues,
   matchesPattern,
+  slotKeyByPosition,
 } from '@/lib/crossword'
 
 const t = {
@@ -328,10 +329,6 @@ export default function BuilderClient({
     }
   }
 
-  function slotKeyFor(n: number, dir: Direction): string {
-    return `${n}-${dir}`
-  }
-
   function handlePlaceWord(entry: GlossaryEntry) {
     if (!activeSlot || activeSlot.number === null) return
     const next = grid.map((row) => [...row])
@@ -344,7 +341,7 @@ export default function BuilderClient({
       next[r][col] = w[i]!
     }
     setGrid(next)
-    const sk = slotKeyFor(activeSlot.number, direction)
+    const sk = slotKeyByPosition(startRow, startCol, direction)
     setClueBySlot((prev) => ({ ...prev, [sk]: entry.clue }))
     setGlossaryIdBySlot((prev) => ({ ...prev, [sk]: entry.id }))
   }
@@ -1994,7 +1991,7 @@ function PlacedWordRow({
   }
   const srcStyle = sourceStyles[item.source]
 
-  const slotKey = `${item.number}-${item.direction}`
+  const slotKey = slotKeyByPosition(item.row, item.col, item.direction)
 
   function commit() {
     onClueEdit(slotKey, draftClue)
